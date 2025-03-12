@@ -1,0 +1,12 @@
+
+1. research workflow中，当前task planning workflow实际上是自己在循环，但是设计方案应该是经过search plan workflow循环之后，即第一次任务规划的结果都有了以后，进行第二次task planning，再看看有没有什么insight（来自agent或者人类），然后再进行一次task planning，然后在进入第二次大的task循环的search planning部分，而不是说task plan只在最开始自己迭代几次，之后就不随研究结果迭代了
+2. search planning workflow的部分同理，你当前直接针对不同的sub_tasks一次性生成了搜索策略，但实际上应该是执行完第一个sub_task以后，才去分析下一个sub_task，这个时候才会选择搜具体的搜索策略
+3. sub_answer workflow同理，他也应该是根据当前sub_task来进行子回答的，而不是在一个循环中，把每一个sub_task都回答一遍
+4. 关于上述设计，我可以再给你生动说明一下，即：
+-task planning workflow应该不感知具体的搜索query、搜索到的doc，而只感知上一次大的任务规划是什么、上一次任务规划的结果是什么（即对于每个sub_task的子回答）、当前对此次任务规划的insight是什么（多轮形式）
+-search planning workflow应该不感知具体的搜索doc是什么，也不感知之前的任务规划是什么，它只感知当前任务规划都有哪些sub_tasks，然后当前进展到哪一个sub_task了和上一个sub_task的执行过程是怎样的以及对应的子回答是什么（多轮形式）
+-sub_answer workflow应该不感知除了当前sub_task以外的之前的或者将来的sub_task，它只需要感知当前sub_task是啥，搜索方式有哪些，需要爬虫深入还是直接子回答（多轮形式）
+
+你认为这样的解释以后，我的方案是否合理？请一步步思考，如果合理，请修改对应的实现，如果不合理，请与我讨论。请注意，我注意到当前LLMProvider为单轮输入，如果你认为需要改为多轮输入，也请进行相应的修改
+
+分析一下第一个sub_task有没有执行完，没执行完的话就继续搜索规划-搜索-子回答的循环，执行完的话才是

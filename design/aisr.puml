@@ -1,0 +1,195 @@
+@startuml
+'https://plantuml.com/sequence-diagram
+
+
+    '%% 核心系统类'
+    class AISystem {
+        +MemoryManager memory_manager
+        +Router router
+        +run_research(query: str): Dict
+        -initialize_components()
+    }
+
+    class Router {
+        +Dictionary~string, Component~ components
+        +register(name: str, component: Component)
+        +route(function_call: Dict): Dict
+        -handle_error(error: Exception): Dict
+    }
+
+    class MemoryManager {
+        +GlobalMemory global_memory
+        +Dictionary~string, Memory~ component_memories
+        +get_memory_view(component_name: str): Memory
+        +save_global_state(key: str, value: Any)
+    }
+
+    '%% 抽象基类'
+    class Component {
+        <<abstract>>
+        +execute(context: Dict): Dict
+    }
+
+    class Agent {
+        <<abstract>>
+        +LLMProvider llm
+        +AgentMemory memory
+        +execute(context: Dict): Dict
+        #build_prompt(context: Dict): str
+        #parse_response(response: str): Dict
+    }
+
+    class Workflow {
+        <<abstract>>
+        +Router router
+        +WorkflowMemory memory
+        +execute(context: Dict): Dict
+    }
+
+    class Tool {
+        <<abstract>>
+        +execute(parameters: Dict): Dict
+        +get_description(): str
+    }
+
+    class Memory {
+        <<abstract>>
+        +add(entry: Dict)
+        +get_relevant(context: Dict): List
+        +clear()
+    }
+
+    '%% 具体Agent类'
+    class TaskPlanAgent {
+        +generate_plan(query: str): Dict
+        +refine_plan(previous_plan: Dict, insights: Dict): Dict
+    }
+
+    class SearchPlanAgent {
+        +generate_search_strategy(task: Dict): Dict
+        +refine_strategy(previous_strategy: Dict, results: Dict): Dict
+    }
+
+    class SubAnswerAgent {
+        +analyze_results(search_results: Dict): Dict
+        +refine_answer(previous_answer: Dict, deep_analysis: Dict): Dict
+    }
+
+    class InsightAgent {
+        +analyze_plan(plan: Dict): Dict
+        +analyze_results(sub_answers: Dict): Dict
+    }
+
+    class AnswerPlanAgent {
+        +plan_answer(query: str, sub_answers: Dict, insights: Dict): Dict
+    }
+
+    class AnswerAgent {
+        +generate_answer(query: str, sub_answers: Dict, plan: Dict): Dict
+    }
+
+    '%% 具体Workflow类'
+    class TaskPlanningWorkflow {
+        +execute(query: str): Dict
+        -iterate_planning(initial_plan: Dict): Dict
+    }
+
+    class SearchPlanningWorkflow {
+        +execute(tasks: List): Dict
+        -execute_search(task: Dict, strategy: Dict): Dict
+        -refine_strategy(task: Dict, results: Dict): Dict
+    }
+
+    class SubAnswerWorkflow {
+        +execute(task: Dict, search_results: Dict): Dict
+        -analyze_need_for_crawling(sub_answer: Dict): bool
+        -execute_crawling(urls: List): Dict
+    }
+
+    class ResearchWorkflow {
+        +execute(query: str): Dict
+        -evaluate_progress(context: Dict): bool
+    }
+
+    '%% 具体Tool类'
+    class WebSearchTool {
+        +execute(query: str): Dict
+    }
+
+    class WebCrawlerTool {
+        +execute(url: str): Dict
+    }
+
+    class LLMProvider {
+        +generate(prompt: str): str
+        +generate_with_function(prompt: str, functions: List): Dict
+    }
+
+    '%% 记忆实现类'
+    class GlobalMemory {
+        +save_state(key: str, value: Any)
+        +get_state(key: str): Any
+    }
+
+    class AgentMemory {
+        +add_interaction(input: Dict, output: Dict)
+        +get_relevant_history(context: Dict): List
+        +summarize_history(): str
+    }
+
+    class WorkflowMemory {
+        +save_result(step: str, result: Dict)
+        +get_results(step: str): List
+        +get_latest_result(step: str): Dict
+    }
+
+    '%% 关系'
+    AISystem *-- Router
+    AISystem *-- MemoryManager
+
+    Component <|-- Agent
+    Component <|-- Workflow
+    Component <|-- Tool
+
+    Agent <|-- TaskPlanAgent
+    Agent <|-- SearchPlanAgent
+    Agent <|-- SubAnswerAgent
+    Agent <|-- InsightAgent
+    Agent <|-- AnswerPlanAgent
+    Agent <|-- AnswerAgent
+
+    Workflow <|-- TaskPlanningWorkflow
+    Workflow <|-- SearchPlanningWorkflow
+    Workflow <|-- SubAnswerWorkflow
+    Workflow <|-- ResearchWorkflow
+
+    Tool <|-- WebSearchTool
+    Tool <|-- WebCrawlerTool
+
+    Memory <|-- GlobalMemory
+    Memory <|-- AgentMemory
+    Memory <|-- WorkflowMemory
+
+    Agent *-- AgentMemory
+    Agent *-- LLMProvider
+
+    Workflow *-- WorkflowMemory
+    Workflow *-- Router
+
+    MemoryManager *-- GlobalMemory
+    MemoryManager *-- Memory
+
+    '%% 依赖关系'
+    TaskPlanningWorkflow ..> TaskPlanAgent
+    TaskPlanningWorkflow ..> InsightAgent
+
+    SearchPlanningWorkflow ..> SearchPlanAgent
+    SearchPlanningWorkflow ..> WebSearchTool
+
+    SubAnswerWorkflow ..> SubAnswerAgent
+    SubAnswerWorkflow ..> WebCrawlerTool
+
+    ResearchWorkflow ..> TaskPlanningWorkflow
+    ResearchWorkflow ..> SearchPlanningWorkflow
+    ResearchWorkflow ..> SubAnswerWorkflow
+@enduml
