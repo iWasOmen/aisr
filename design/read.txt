@@ -27,3 +27,13 @@ task executing 循环：sub_tasks->search planning for task1->search executing�
 search executing循环：sub_task+search planning->search->子回答 或者 sub_task+search planning->search->爬虫深入->...->子回答
 
 即分为planning部分和executing 部分，你觉得这样子是不是更加清晰些？清晰的话就再继续优化下
+
+认同，然后TaskExecutingWorkflow可以重命名为TaskExecutingSearchPlanningWorkflow，即搜索规划是在这一步完成的
+
+TaskExecutingSearchPlanningWorkflow
+
+好的，现在我们该优化TaskExecutingSearchPlanningWorkflow了，
+prioritized_tasks = self._prioritize_tasks(sub_tasks)这种调整优先级的不要，因为默认任务规划传过来的sub_tasks是有优先级的
+然后就是task executingSearchPlanning 循环：sub_tasks->search planning for task1->search executing循环->循环直到task1解决->search planning for task2->search->search executing循环->..
+现在应该没有“循环直到task1解决”这个循环，现在只是对每一个sub_task循环
+请你与我讨论，我的设计是否更优？如果你认可，你可以直接优化TaskExecutingSearchPlanningWorkflow

@@ -1,5 +1,7 @@
 """
 研究工作流模块，协调整个研究过程。
+
+实现最外层任务规划循环，负责整体研究流程控制。
 """
 
 import logging
@@ -11,15 +13,15 @@ from aisr.workflows.base import Workflow
 
 class ResearchWorkflow(Workflow):
     """
-    主研究工作流，协调整个研究过程。
+    主研究工作流，实现最外层任务规划循环。
 
-    这是系统的核心工作流，负责编排其他工作流和实现
-    任务规划、搜索和答案生成的三大反馈循环。
+    负责整体研究方向把控，包括任务规划、执行结果评估、
+    重规划决策和最终答案生成。不涉及具体任务执行细节。
     """
 
     def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        执行研究工作流。
+        执行最外层研究规划循环。
 
         Args:
             context: 包含研究查询的上下文
@@ -40,7 +42,7 @@ class ResearchWorkflow(Workflow):
 
         try:
             # 初始化研究状态
-            self.memory.update_state("current_iteration", 0)
+            self.memory.update_state("current_planning_iteration", 0)
             self.memory.update_state("sub_answers", {})
 
             # 记录研究开始
@@ -49,137 +51,112 @@ class ResearchWorkflow(Workflow):
                 "timestamp": datetime.now().isoformat()
             })
 
-            # 获取初始复杂度估计（只用于设置初始迭代次数）
+            # 获取初始复杂度估计（用于设置最大规划迭代次数）
             complexity = self._estimate_initial_complexity(query)
-            max_iterations = self._get_max_iterations(complexity)
+            max_planning_iterations = self._get_max_iterations(complexity)
             self.memory.update_state("complexity", complexity)
-            self.memory.update_state("max_iterations", max_iterations)
+            self.memory.update_state("max_planning_iterations", max_planning_iterations)
 
-            # 研究迭代主循环
-            current_iteration = 0
+            # ======== 任务规划循环（最外层循环）========
+            current_planning_iteration = 0
+            accumulated_sub_answers = {}  # 累积所有子回答
 
-            while current_iteration < max_iterations:
-                logging.info(f"开始研究迭代 {current_iteration + 1}/{max_iterations}")
-                self.memory.update_state("current_iteration", current_iteration + 1)
+            while current_planning_iteration < max_planning_iterations:
+                iteration_number = current_planning_iteration + 1
+                logging.info(f"开始任务规划迭代 {iteration_number}/{max_planning_iterations}")
+                self.memory.update_state("current_planning_iteration", iteration_number)
 
-                # 记录迭代开始
-                self._record_step("iteration_started", {
-                    "iteration": current_iteration + 1,
-                    "max_iterations": max_iterations
+                # 记录规划迭代开始
+                self._record_step("planning_iteration_started", {
+                    "iteration": iteration_number,
+                    "max_iterations": max_planning_iterations
                 })
 
-                # 1. 任务规划（基于之前的结果优化规划）
-                task_planning_context = {
+                # 1. 任务规划阶段 - 生成/重新规划研究任务
+                planning_context = {
                     "query": query
                 }
 
-                # 如果不是第一次迭代，添加前一轮的结果
-                if current_iteration > 0:
-                    task_planning_context["previous_plan"] = self.memory.get_latest_result("task_planning")
-                    task_planning_context["previous_answers"] = self.memory.get_state("sub_answers", {})
+                # 如果不是第一次迭代，添加前一轮的结果以用于重规划
+                if current_planning_iteration > 0:
+                    planning_context["previous_plan"] = self.memory.get_latest_result("task_planning")
+                    planning_context["previous_answers"] = accumulated_sub_answers
 
                 # 执行任务规划
-                task_planning_result = self.call_component("task_planning_workflow.execute", task_planning_context)
-                self.memory.save_result("task_planning", task_planning_result)
+                task_plan = self.call_component("task_plan_agent.plan_research", planning_context)
+                self.memory.save_result("task_planning", task_plan)
 
                 # 获取子任务列表
-                sub_tasks = task_planning_result.get("sub_tasks", [])
+                sub_tasks = task_plan.get("sub_tasks", [])
                 self.memory.update_state("sub_tasks", sub_tasks)
 
                 # 更新复杂度（如有变化）
-                complexity = task_planning_result.get("complexity", complexity)
+                complexity = task_plan.get("complexity", complexity)
                 self.memory.update_state("complexity", complexity)
 
-                # 2. 按顺序处理每个子任务
-                iteration_answers = {}
-
-                for index, task in enumerate(sub_tasks):
-                    task_id = task.get("id", f"task-{index+1}")
-
-                    # 2.1 为当前任务生成搜索策略并执行搜索
-                    search_context = {
-                        "current_task": task,
-                        "task_index": index,
-                        "total_tasks": len(sub_tasks)
-                    }
-
-                    # 如果有前一个任务的结果，添加到上下文
-                    if index > 0 and sub_tasks[index-1]["id"] in iteration_answers:
-                        prev_task_id = sub_tasks[index-1]["id"]
-                        prev_task = sub_tasks[index-1]
-                        search_context["previous_task"] = prev_task
-                        search_context["previous_answer"] = iteration_answers[prev_task_id]
-
-                    # 执行搜索
-                    search_result = self.call_component("search_planning_workflow.execute", search_context)
-                    self.memory.save_result(f"search_result_{task_id}", search_result)
-
-                    # 2.2 根据搜索结果生成子回答
-                    if "search_result" in search_result and not search_result.get("error"):
-                        answer_context = {
-                            "task": task,
-                            "search_result": search_result["search_result"]
-                        }
-
-                        # 执行子回答生成
-                        sub_answer_result = self.call_component("sub_answer_workflow.execute", answer_context)
-
-                        # 如果生成了子回答，添加到结果
-                        if "sub_answer" in sub_answer_result:
-                            iteration_answers[task_id] = sub_answer_result["sub_answer"]
-
-                # 3. 更新全局子回答集合
-                current_sub_answers = self.memory.get_state("sub_answers", {})
-                current_sub_answers.update(iteration_answers)
-                self.memory.update_state("sub_answers", current_sub_answers)
-
-                # 记录本轮迭代的子回答
-                self.memory.save_result(f"iteration_answers_{current_iteration + 1}", iteration_answers)
-
-                # 4. 生成当前迭代的洞察
-                insights = self._generate_insights(query, current_sub_answers)
-                self.memory.save_result(f"insights_iteration_{current_iteration + 1}", insights)
-
-                # 记录迭代完成
-                self._record_step("iteration_completed", {
-                    "iteration": current_iteration + 1,
-                    "new_sub_answers": len(iteration_answers),
-                    "total_sub_answers": len(current_sub_answers)
+                # 2. 任务执行阶段 - 将任务委托给任务执行工作流
+                # 任务执行工作流负责搜索规划和搜索执行
+                execution_result = self.call_component("task_executing_search_planning_workflow.execute", {
+                    "query": query,
+                    "sub_tasks": sub_tasks,
+                    "previous_answers": accumulated_sub_answers
                 })
 
-                # 5. 检查是否需要继续研究
-                if not self._needs_more_research(insights, current_iteration, max_iterations):
-                    logging.info("研究目标已满足，不需要更多迭代")
+                # 获取本轮执行结果并累积
+                iteration_answers = execution_result.get("sub_answers", {})
+                accumulated_sub_answers.update(iteration_answers)
+
+                # 记录本轮迭代结果
+                self.memory.save_result(f"iteration_answers_{iteration_number}", iteration_answers)
+                self.memory.update_state("sub_answers", accumulated_sub_answers)
+
+                # 3. 洞察生成 - 分析当前研究进展
+                insights = self._generate_insights(query, accumulated_sub_answers)
+                self.memory.save_result(f"insights_iteration_{iteration_number}", insights)
+
+                # 记录规划迭代完成
+                self._record_step("planning_iteration_completed", {
+                    "iteration": iteration_number,
+                    "new_sub_answers": len(iteration_answers),
+                    "total_sub_answers": len(accumulated_sub_answers)
+                })
+
+                # 4. 决策阶段 - 确定是否需要继续规划迭代
+                # 检查是否需要继续研究（基于洞察）
+                if not self._needs_more_research(insights, current_planning_iteration, max_planning_iterations):
+                    logging.info("研究目标已满足，不需要更多规划迭代")
                     break
 
                 # 考虑用户交互
-                if self._should_interact_with_user(current_iteration, max_iterations):
-                    user_feedback = self._request_user_feedback("继续研究", {
-                        "iteration": current_iteration + 1,
-                        "max_iterations": max_iterations,
+                if self._should_interact_with_user(current_planning_iteration, complexity):
+                    user_feedback = self._request_user_feedback("规划迭代", {
+                        "iteration": iteration_number,
+                        "max_iterations": max_planning_iterations,
                         "insights_summary": self._summarize_insights(insights)
                     })
 
                     if not self._should_continue_based_on_feedback(user_feedback):
-                        logging.info("根据用户反馈停止迭代")
+                        logging.info("根据用户反馈停止规划迭代")
                         break
 
-                # 准备下一轮迭代
-                current_iteration += 1
+                # 准备下一轮规划迭代
+                current_planning_iteration += 1
 
-            # 所有迭代完成，使用最终的子回答生成答案
-            all_sub_answers = self.memory.get_state("sub_answers", {})
-            final_insights = self._generate_insights(query, all_sub_answers)
+            # ======== 答案生成阶段 ========
+            # 使用累积的子回答生成最终答案
+            final_insights = self._generate_insights(query, accumulated_sub_answers)
+
+            # 规划答案结构
+            answer_plan = self._plan_answer(query, accumulated_sub_answers, final_insights)
 
             # 生成最终答案
-            answer_plan = self._plan_answer(query, all_sub_answers, final_insights)
-            final_answer = self._generate_answer(query, all_sub_answers, answer_plan)
+            final_answer = self._generate_answer(query, accumulated_sub_answers, answer_plan)
 
             # 记录研究完成
             self._record_step("research_completed", {
                 "query": query,
-                "iterations_executed": current_iteration + 1,
-                "sub_tasks_completed": len(all_sub_answers),
+                "planning_iterations": current_planning_iteration + 1,
+                "sub_tasks_completed": len(accumulated_sub_answers),
                 "end_time": datetime.now().isoformat()
             })
 
@@ -222,11 +199,11 @@ class ResearchWorkflow(Workflow):
 
     def _generate_insights(self, query: str, sub_answers: Dict[str, Any]) -> Dict[str, Any]:
         """
-        生成研究洞察。
+        生成研究洞察，评估当前研究进展。
 
         Args:
             query: 研究查询
-            sub_answers: 子回答集合
+            sub_answers: 累积的子回答集合
 
         Returns:
             研究洞察
@@ -294,7 +271,7 @@ class ResearchWorkflow(Workflow):
 
     def _needs_more_research(self, insights: Dict[str, Any], current_iteration: int, max_iterations: int) -> bool:
         """
-        确定是否需要更多研究。
+        确定是否需要更多规划迭代，基于研究洞察。
 
         Args:
             insights: 当前的研究洞察
@@ -326,10 +303,17 @@ class ResearchWorkflow(Workflow):
         # 默认不需要更多研究
         return False
 
-    def _should_interact_with_user(self, current_iteration: int, max_iterations: int) -> bool:
-        """确定是否应该与用户交互。"""
-        # 简单示例：在第一次迭代后与用户交互
-        complexity = self.memory.get_state("complexity", "medium")
+    def _should_interact_with_user(self, current_iteration: int, complexity: str) -> bool:
+        """
+        确定是否应该与用户交互，基于迭代和复杂度。
+
+        Args:
+            current_iteration: 当前迭代索引
+            complexity: 研究复杂度
+
+        Returns:
+            是否应该交互
+        """
         if complexity == "complex":
             return True  # 复杂查询总是请求用户反馈
         elif complexity == "medium" and current_iteration >= 1:
