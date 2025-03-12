@@ -10,3 +10,12 @@
 你认为这样的解释以后，我的方案是否合理？请一步步思考，如果合理，请修改对应的实现，如果不合理，请与我讨论。请注意，我注意到当前LLMProvider为单轮输入，如果你认为需要改为多轮输入，也请进行相应的修改
 
 分析一下第一个sub_task有没有执行完，没执行完的话就继续搜索规划-搜索-子回答的循环，执行完的话才是
+
+
+            "complexity": complexity,
+            "sub_tasks": sub_tasks,
+            "research_plan": research_plan
+            在一起
+
+complexity、sub_tasks、research_plan
+_analyze_plan、_generate_research_insights、_refine_plan、_refine_based_on_results

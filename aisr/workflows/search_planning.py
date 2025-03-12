@@ -13,115 +13,148 @@ class SearchPlanningWorkflow(Workflow):
     """
     搜索规划工作流。
 
-    负责为子任务生成搜索策略，执行搜索，并根据搜索结果
+    负责为单个子任务生成搜索策略，执行搜索，并根据搜索结果
     不断优化搜索策略的反馈循环。
     """
 
     def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        执行搜索规划工作流。
+        执行搜索规划工作流，处理单个子任务。
 
         Args:
-            context: 包含子任务的上下文
-                - sub_tasks: 子任务列表
+            context: 包含当前任务的上下文
+                - current_task: 当前要执行搜索的子任务
+                - task_index: 当前任务在列表中的索引（可选）
+                - total_tasks: 总任务数量（可选）
+                - previous_task: 前一个子任务（可选）
+                - previous_search_result: 前一个任务的搜索结果（可选）
 
         Returns:
-            搜索结果，按任务ID组织
+            当前任务的搜索结果
         """
-        sub_tasks = context.get("sub_tasks", [])
-        if not sub_tasks:
-            error_msg = "缺少子任务"
+        current_task = context.get("current_task")
+        previous_task = context.get("previous_task")
+        previous_search_result = context.get("previous_search_result")
+
+        if not current_task:
+            error_msg = "缺少当前任务"
             logging.error(error_msg)
             return {"error": error_msg}
 
-        logging.info(f"开始搜索规划工作流，{len(sub_tasks)} 个任务")
-        self.memory.update_state("sub_tasks", sub_tasks)
+        task_id = current_task.get("id", "unknown-task")
+        task_index = context.get("task_index", 0)
+        total_tasks = context.get("total_tasks", 1)
+
+        logging.info(f"开始搜索规划工作流，任务 {task_id} ({task_index+1}/{total_tasks})")
+
+        # 记录任务和上下文信息
+        self.memory.update_state("current_task", current_task)
+        self.memory.update_state("task_index", task_index)
+        self.memory.update_state("total_tasks", total_tasks)
+
+        if previous_task:
+            self.memory.update_state("previous_task", previous_task)
+
+        if previous_search_result:
+            self.memory.update_state("previous_search_result", previous_search_result)
 
         try:
-            # 为每个任务生成搜索策略
-            all_search_strategies = self._generate_search_strategies(sub_tasks)
-            self.memory.save_result("search_strategies", all_search_strategies)
+            # 生成搜索策略（考虑前一个任务的结果）
+            search_strategy = self._generate_search_strategy(current_task, previous_task, previous_search_result)
+            self.memory.save_result("search_strategy", search_strategy)
 
-            # 存储每个任务的搜索结果
-            all_search_results = {}
+            # 执行搜索循环
+            search_result = self._execute_search_loop(current_task, search_strategy)
 
-            # 为每个任务执行搜索
-            for task in sub_tasks:
-                task_id = task.get("id", "unknown-task")
+            # 记录任务搜索完成
+            self.memory.save_result("search_completed", {
+                "task_id": task_id,
+                "task_index": task_index,
+                "timestamp": datetime.now().isoformat(),
+                "search_queries": search_result.get("queries", []),
+                "result_count": len(search_result.get("results", []))
+            })
 
-                # 获取该任务的搜索策略
-                task_strategy = all_search_strategies.get(task_id, {})
-
-                # 如果没有策略，跳过此任务
-                if not task_strategy:
-                    logging.warning(f"任务 {task_id} 缺少搜索策略，跳过")
-                    continue
-
-                # 执行搜索循环
-                search_result = self._execute_search_loop(task, task_strategy)
-                all_search_results[task_id] = search_result
-
-                # 记录任务搜索完成
-                self.memory.save_result(f"search_completed_{task_id}", {
-                    "task_id": task_id,
-                    "timestamp": datetime.now().isoformat(),
-                    "search_queries": search_result.get("queries", []),
-                    "result_count": len(search_result.get("results", []))
-                })
-
-            # 保存所有搜索结果
-            self.memory.save_result("all_search_results", all_search_results)
-
+            # 返回结果
             return {
-                "search_results": all_search_results,
-                "task_count": len(sub_tasks),
-                "completed_count": len(all_search_results)
+                "task_id": task_id,
+                "search_result": search_result,
+                "task_index": task_index,
+                "total_tasks": total_tasks
             }
 
         except Exception as e:
             logging.error(f"搜索规划工作流执行错误: {str(e)}")
-            # 返回已完成的结果或错误
-            search_results = self.memory.get_latest_result("all_search_results")
-            if search_results:
-                return {
-                    "search_results": search_results,
-                    "error": str(e),
-                    "partial_results": True
-                }
-            else:
-                return {
-                    "error": f"搜索规划失败: {str(e)}",
-                    "search_results": {}
-                }
+            # 返回错误
+            return {
+                "task_id": task_id,
+                "error": f"搜索规划失败: {str(e)}",
+                "task_index": task_index,
+                "total_tasks": total_tasks
+            }
 
-    def _generate_search_strategies(self, sub_tasks: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    def _generate_search_strategy(self,
+                                 current_task: Dict[str, Any],
+                                 previous_task: Optional[Dict[str, Any]] = None,
+                                 previous_search_result: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        为所有子任务生成搜索策略。
+        为当前子任务生成搜索策略，可能考虑前一个任务的结果。
 
         Args:
-            sub_tasks: 子任务列表
+            current_task: 当前子任务
+            previous_task: 前一个子任务（可选）
+            previous_search_result: 前一个任务的搜索结果（可选）
 
         Returns:
-            按任务ID索引的搜索策略字典
+            搜索策略
         """
-        logging.info("为所有子任务生成搜索策略")
+        task_id = current_task.get("id", "unknown-task")
+        logging.info(f"为任务 {task_id} 生成搜索策略")
 
-        # 调用搜索规划代理
-        result = self.call_component("search_plan_agent.generate_search_strategies", {
-            "sub_tasks": sub_tasks
-        })
+        # 准备上下文
+        strategy_context = {
+            "task": current_task
+        }
 
-        # 获取搜索策略
-        search_strategies = result.get("search_strategies", {})
+        # 如果有前一个任务和结果，添加到上下文
+        if previous_task and previous_search_result:
+            strategy_context["previous_task"] = previous_task
+            strategy_context["previous_search_result"] = previous_search_result
 
-        # 保存每个任务的搜索策略
-        for task_id, strategy in search_strategies.items():
-            self.memory.save_result(f"search_strategy_{task_id}", strategy)
+            # 调用搜索规划代理
+            result = self.call_component("search_plan_agent.generate_strategy_with_context", strategy_context)
+        else:
+            # 调用搜索规划代理（无上下文）
+            result = self.call_component("search_plan_agent.generate_strategy", strategy_context)
 
-        return search_strategies
+        # 提取策略
+        strategy = result.get("strategy", {})
 
-    def _execute_search_loop(self, task: Dict[str, Any], search_strategy: Dict[str, Any], max_iterations: int = 3) -> \
-    Dict[str, Any]:
+        # 如果返回为空，使用默认策略
+        if not strategy:
+            strategy = self._create_default_strategy(current_task)
+
+        return strategy
+
+    def _create_default_strategy(self, task: Dict[str, Any]) -> Dict[str, Any]:
+        """创建默认搜索策略。"""
+        task_id = task.get("id", "unknown-task")
+        task_description = task.get("description", "")
+
+        # 创建简单的默认查询
+        default_query = task_description
+        if len(default_query) > 100:
+            default_query = default_query[:97] + "..."
+
+        return {
+            "task_id": task_id,
+            "approach": "direct",
+            "queries": [default_query],
+            "tools": ["web_search"],
+            "is_default": True
+        }
+
+    def _execute_search_loop(self, task: Dict[str, Any], search_strategy: Dict[str, Any], max_iterations: int = 3) -> Dict[str, Any]:
         """
         执行搜索循环，根据结果优化搜索策略。
 
@@ -157,7 +190,7 @@ class SearchPlanningWorkflow(Workflow):
                 search_results = self._execute_search(task, current_strategy)
 
             # 记录搜索结果
-            self.memory.save_result(f"search_iteration_{task_id}_{current_iteration + 1}", {
+            self.memory.save_result(f"search_iteration_{current_iteration + 1}", {
                 "strategy": current_strategy,
                 "results": search_results
             })
@@ -169,7 +202,7 @@ class SearchPlanningWorkflow(Workflow):
             quality_score = self._evaluate_search_results(search_results, task)
 
             # 记录质量评估
-            self.memory.save_result(f"search_quality_{task_id}_{current_iteration + 1}", {
+            self.memory.save_result(f"search_quality_{current_iteration + 1}", {
                 "quality_score": quality_score,
                 "iteration": current_iteration + 1
             })
@@ -182,7 +215,7 @@ class SearchPlanningWorkflow(Workflow):
             refined_strategy = self._refine_search_strategy(task, current_strategy, search_results)
 
             # 记录策略优化
-            self.memory.save_result(f"refined_strategy_{task_id}_{current_iteration + 1}", refined_strategy)
+            self.memory.save_result(f"refined_strategy_{current_iteration + 1}", refined_strategy)
 
             # 更新搜索策略
             current_strategy = refined_strategy
@@ -230,7 +263,7 @@ class SearchPlanningWorkflow(Workflow):
         tools = strategy.get("tools", ["web_search"])
 
         # 记录搜索开始
-        self.memory.save_result(f"search_started_{task_id}", {
+        self.memory.save_result("search_started", {
             "task_id": task_id,
             "queries": queries,
             "tools": tools,
@@ -322,8 +355,7 @@ class SearchPlanningWorkflow(Workflow):
 
         return min(1.0, max(0.0, score))
 
-    def _refine_search_strategy(self, task: Dict[str, Any], strategy: Dict[str, Any], results: Dict[str, Any]) -> Dict[
-        str, Any]:
+    def _refine_search_strategy(self, task: Dict[str, Any], strategy: Dict[str, Any], results: Dict[str, Any]) -> Dict[str, Any]:
         """
         基于搜索结果优化搜索策略。
 
