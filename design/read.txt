@@ -19,3 +19,11 @@
 
 complexity、sub_tasks、research_plan
 _analyze_plan、_generate_research_insights、_refine_plan、_refine_based_on_results
+
+
+设计上还有一些问题，就是一共应该由三个循环：
+task planning循环：query->task planning->agent or human insight->task executing 循环->task planning->agent or human insight->task executing 循环->...->answer plan->answer executing
+task executing 循环：sub_tasks->search planning for task1->search executing循环->循环直到task1解决->search planning for task2->search->search executing循环->..
+search executing循环：sub_task+search planning->search->子回答 或者 sub_task+search planning->search->爬虫深入->...->子回答
+
+即分为planning部分和executing 部分，你觉得这样子是不是更加清晰些？清晰的话就再继续优化下
