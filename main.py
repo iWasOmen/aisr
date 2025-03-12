@@ -15,9 +15,8 @@ from aisr.core.llm_provider import LLMProvider
 
 # 导入工作流
 from aisr.workflows.research import ResearchWorkflow
-from aisr.workflows.task_planning import TaskPlanningWorkflow
-from aisr.workflows.search_planning import SearchPlanningWorkflow
-from aisr.workflows.sub_answer import SubAnswerWorkflow
+from aisr.workflows.task_executing_search_planning import TaskExecutingSearchPlanningWorkflow
+from aisr.workflows.search_sub_answer_executing import SearchSubAnswerExecutingWorkflow
 
 # 导入智能体
 from aisr.agents.base import Agent
@@ -118,19 +117,14 @@ class AISystem:
         self.router.register("answer_agent", answer_agent)
 
         # 初始化工作流
-        task_planning_workflow = TaskPlanningWorkflow(
+        task_executing_search_planning = TaskExecutingSearchPlanningWorkflow(
             self.router,
-            self.memory_manager.get_memory_view("task_planning_workflow")
+            self.memory_manager.get_memory_view("task_executing_search_planning")
         )
 
-        search_planning_workflow = SearchPlanningWorkflow(
+        search_sub_answer_executing_workflow = SearchSubAnswerExecutingWorkflow(
             self.router,
-            self.memory_manager.get_memory_view("search_planning_workflow")
-        )
-
-        sub_answer_workflow = SubAnswerWorkflow(
-            self.router,
-            self.memory_manager.get_memory_view("sub_answer_workflow")
+            self.memory_manager.get_memory_view("search_sub_answer_executing")
         )
 
         research_workflow = ResearchWorkflow(
@@ -139,9 +133,8 @@ class AISystem:
         )
 
         # 注册工作流
-        self.router.register("task_planning_workflow", task_planning_workflow)
-        self.router.register("search_planning_workflow", search_planning_workflow)
-        self.router.register("sub_answer_workflow", sub_answer_workflow)
+        self.router.register("task_executing_search_planning", task_executing_search_planning)
+        self.router.register("search_sub_answer_executing_workflow", search_sub_answer_executing_workflow)
         self.router.register("research_workflow", research_workflow)
 
         logging.info("AISR系统组件已初始化完成")

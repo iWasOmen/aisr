@@ -96,7 +96,7 @@ class ResearchWorkflow(Workflow):
 
                 # 2. 任务执行阶段 - 将任务委托给任务执行工作流
                 # 任务执行工作流负责搜索规划和搜索执行
-                execution_result = self.call_component("task_executing_search_planning_workflow.execute", {
+                execution_result = self.call_component("task_executing_search_planning.execute", {
                     "query": query,
                     "sub_tasks": sub_tasks,
                     "previous_answers": accumulated_sub_answers

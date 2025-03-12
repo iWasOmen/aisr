@@ -1,0 +1,2641 @@
+================================================================================
+AISR PROJECT CODE SUMMARY
+Generated: 2025-03-13 00:10:03
+================================================================================
+
+## PROJECT STRUCTURE
+
+- aisr/
+  - __init__.py
+  - main.py
+- aisr\agents/
+  - __init__.py
+  - answer.py
+  - answer_plan.py
+  - base.py
+  - insight.py
+  - search_plan.py
+  - sub_answer.py
+  - task_plan.py
+- aisr\config/
+  - __init__.py
+  - settings.py
+- aisr\config\prompts/
+  - __init__.py
+  - search_plan.py
+  - task_plan.py
+- aisr\core/
+  - __init__.py
+  - base.py
+  - llm_provider.py
+  - router.py
+- aisr\memory/
+  - __init__.py
+  - agent_memory.py
+  - base.py
+  - global_memory.py
+  - manager.py
+  - workflow_memory.py
+- aisr\tests/
+  - __init__.py
+- aisr\tools/
+  - __init__.py
+  - base.py
+  - web_crawler.py
+  - web_search.py
+- aisr\utils/
+  - __init__.py
+  - error_handling.py
+  - logging.py
+- aisr\workflows/
+  - __init__.py
+  - base.py
+  - research.py
+  - search_sub_answer_executing.py
+  - task_executing_search_planning.py
+
+
+## FILE CONTENTS
+
+### Directory: aisr/
+
+#### __init__.py
+```python
+"""AISR - AI-assisted Search and Research System"""
+
+from aisr.core.base import Component
+from aisr.core.router import Router
+```
+
+#### main.py
+```python
+
+```
+
+### Directory: aisr\agents/
+
+#### __init__.py
+```python
+"""智能体组件"""
+
+from aisr.agents.base import Agent
+from aisr.agents.task_plan import TaskPlanAgent
+from aisr.agents.search_plan import SearchPlanAgent
+from aisr.agents.sub_answer import SubAnswerAgent
+from aisr.agents.insight import InsightAgent
+from aisr.agents.answer_plan import AnswerPlanAgent
+from aisr.agents.answer import AnswerAgent
+```
+
+#### answer.py
+```python
+
+```
+
+#### answer_plan.py
+```python
+
+```
+
+#### base.py
+```python
+import abc
+from typing import Dict, Any
+from aisr.core.base import Component
+
+class Agent(Component):
+    """
+    AISR中所有LLM驱动智能体的抽象基类。
+
+    智能体利用LLM能力根据提供的上下文生成决策、洞察和分析。
+    """
+
+    def __init__(self, llm_provider, memory):
+        """
+        初始化智能体。
+
+        Args:
+            llm_provider: LLM服务提供者
+            memory: 智能体的内存系统
+        """
+        self.llm = llm_provider
+        self.memory = memory
+
+    @abc.abstractmethod
+    def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """执行智能体的推理任务"""
+        pass
+
+    @abc.abstractmethod
+    def build_prompt(self, context: Dict[str, Any]) -> str:
+        """基于上下文和内存为LLM构建提示"""
+        pass
+
+    @abc.abstractmethod
+    def parse_response(self, response: str) -> Dict[str, Any]:
+        """将LLM响应解析为结构化输出"""
+        pass
+```
+
+#### insight.py
+```python
+
+```
+
+#### search_plan.py
+```python
+
+```
+
+#### sub_answer.py
+```python
+
+```
+
+#### task_plan.py
+```python
+
+```
+
+### Directory: aisr\config/
+
+#### __init__.py
+```python
+
+```
+
+#### settings.py
+```python
+
+```
+
+### Directory: aisr\config\prompts/
+
+#### __init__.py
+```python
+
+```
+
+#### search_plan.py
+```python
+
+```
+
+#### task_plan.py
+```python
+
+```
+
+### Directory: aisr\core/
+
+#### __init__.py
+```python
+"""核心系统组件"""
+
+from aisr.core.base import Component
+from aisr.core.router import Router
+```
+
+#### base.py
+```python
+import abc
+from typing import Dict, Any
+
+class Component(abc.ABC):
+    """
+    所有AISR系统组件的抽象基类。
+
+    作为Agent、Workflow和Tool的基础，提供统一执行接口。
+    """
+
+    @abc.abstractmethod
+    def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行组件的功能。
+
+        Args:
+            context: 包含执行所需输入数据和参数的字典
+
+        Returns:
+            包含执行结果的字典
+        """
+        pass
+
+    def get_id(self) -> str:
+        """获取组件的唯一标识"""
+        return self.__class__.__name__
+```
+
+#### llm_provider.py
+```python
+"""
+LLM提供者模块，负责与不同的LLM服务提供商集成。
+"""
+
+import json
+import logging
+from typing import Dict, Any, List, Optional, Union
+from datetime import datetime
+
+# 可选导入，根据用户配置决定
+try:
+    import anthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+
+try:
+    import openai
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+
+
+class LLMProvider:
+    """
+    LLM服务提供者类，统一管理不同的LLM API调用。
+
+    支持多种LLM提供者（目前支持Anthropic Claude和OpenAI）。
+    支持单轮和多轮对话模式。
+    """
+
+    def __init__(self, provider: str = "anthropic", api_key: Optional[str] = None, model: Optional[str] = None):
+        """
+        初始化LLM提供者。
+
+        Args:
+            provider: LLM提供者名称，"anthropic"或"openai"
+            api_key: API密钥
+            model: 模型名称
+        """
+        self.provider = provider.lower()
+        self.api_key = api_key
+
+        # 设置默认模型
+        self.models = {
+            "anthropic": {
+                "default": "claude-3-7-sonnet-20250219",
+                "fast": "claude-3-5-sonnet-20240620",
+                "powerful": "claude-3-opus-20240229"
+            },
+            "openai": {
+                "default": "gpt-4o-mini",
+                "fast": "gpt-3.5-turbo",
+                "powerful": "gpt-4o"
+            }
+        }
+
+        # 根据输入或默认值设置模型
+        if model:
+            self.model = model
+        else:
+            self.model = self.models.get(self.provider, {}).get("default")
+
+        # 初始化客户端
+        self._initialize_client()
+
+        logging.info(f"已初始化LLM提供者: {self.provider}, 模型: {self.model}")
+
+    def _initialize_client(self):
+        """初始化适当的LLM客户端。"""
+        if self.provider == "anthropic":
+            if not ANTHROPIC_AVAILABLE:
+                raise ImportError("anthropic 库未安装。请使用 pip install anthropic 安装。")
+            if not self.api_key:
+                raise ValueError("使用Anthropic需要提供API密钥")
+
+            self.client = anthropic.Anthropic(api_key=self.api_key)
+
+        elif self.provider == "openai":
+            if not OPENAI_AVAILABLE:
+                raise ImportError("openai 库未安装。请使用 pip install openai 安装。")
+            if not self.api_key:
+                raise ValueError("使用OpenAI需要提供API密钥")
+
+            self.client = openai.OpenAI(api_key=self.api_key)
+
+        else:
+            raise ValueError(f"不支持的提供者: {self.provider}。支持的提供者: anthropic, openai")
+
+    def generate(self, prompt: Union[str, List[Dict[str, Any]]], temperature: float = 0.7, max_tokens: int = 4000) -> str:
+        """
+        生成LLM响应。支持单轮或多轮对话。
+
+        Args:
+            prompt: 提示文本或消息列表。
+                   如果是字符串，将被视为单轮对话中的用户消息。
+                   如果是列表，将被视为多轮对话的完整历史。
+            temperature: 温度参数，控制随机性
+            max_tokens: 最大生成的token数
+
+        Returns:
+            LLM生成的文本
+        """
+        try:
+            # 根据prompt类型准备消息
+            messages = self._prepare_messages(prompt)
+
+            message_count = len(messages)
+            logging.debug(f"发送{message_count}条消息到{self.provider}")
+
+            if self.provider == "anthropic":
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    messages=messages
+                )
+                result = response.content[0].text
+
+            elif self.provider == "openai":
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+                result = response.choices[0].message.content
+
+            else:
+                raise ValueError(f"无法生成: 不支持的提供者 {self.provider}")
+
+            logging.debug(f"收到LLM响应，长度: {len(result)}")
+            return result
+
+        except Exception as e:
+            logging.error(f"LLM生成错误: {str(e)}")
+            raise RuntimeError(f"LLM生成失败: {str(e)}")
+
+    def generate_with_function_calling(self, prompt: Union[str, List[Dict[str, Any]]], functions: List[Dict[str, Any]], temperature: float = 0.2, max_tokens: int = 4000) -> Dict[str, Any]:
+        """
+        使用函数调用功能生成结构化输出。支持单轮或多轮对话。
+
+        Args:
+            prompt: 提示文本或消息列表
+            functions: 函数定义列表
+            temperature: 温度参数
+            max_tokens: 最大生成的token数
+
+        Returns:
+            结构化的函数调用结果
+        """
+        try:
+            # 根据prompt类型准备消息
+            messages = self._prepare_messages(prompt)
+
+            logging.debug(f"发送带函数定义的提示，函数数量: {len(functions)}")
+
+            if self.provider == "anthropic":
+                # 转换为Anthropic工具格式
+                tools = []
+                for func in functions:
+                    tools.append({
+                        "name": func.get("name", "default_tool"),
+                        "description": func.get("description", ""),
+                        "input_schema": func.get("parameters", {})
+                    })
+
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    messages=messages,
+                    tools=tools
+                )
+
+                # 提取工具使用
+                result = None
+                for content in response.content:
+                    if hasattr(content, 'type') and content.type == "tool_use":
+                        result = {
+                            "name": content.name,
+                            "arguments": content.input
+                        }
+                        break
+
+                if not result:
+                    # 如果没有工具使用，使用文本响应
+                    return {"text": response.content[0].text}
+
+            elif self.provider == "openai":
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    tools=functions,
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+
+                if response.choices[0].message.tool_calls:
+                    tool_call = response.choices[0].message.tool_calls[0]
+                    result = {
+                        "name": tool_call.function.name,
+                        "arguments": json.loads(tool_call.function.arguments)
+                    }
+                else:
+                    # 如果没有工具调用，使用文本响应
+                    return {"text": response.choices[0].message.content}
+
+            else:
+                raise ValueError(f"无法生成: 不支持的提供者 {self.provider}")
+
+            logging.debug(f"收到结构化响应: {result}")
+            return result
+
+        except Exception as e:
+            logging.error(f"结构化生成错误: {str(e)}")
+            return {"error": str(e)}
+
+    def _prepare_messages(self, prompt: Union[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+        """
+        将输入提示转换为标准消息格式。
+
+        Args:
+            prompt: 提示文本或消息列表
+
+        Returns:
+            标准格式的消息列表
+        """
+        if isinstance(prompt, str):
+            # 单条用户消息
+            return [{"role": "user", "content": prompt}]
+
+        elif isinstance(prompt, list):
+            # 验证消息列表格式
+            for msg in prompt:
+                if not isinstance(msg, dict) or "role" not in msg or "content" not in msg:
+                    raise ValueError("消息列表格式不正确，每条消息必须包含'role'和'content'字段")
+
+                # 检查role是否有效
+                if msg["role"] not in ["user", "assistant", "system"]:
+                    raise ValueError(f"无效的消息角色: {msg['role']}，必须是'user'、'assistant'或'system'")
+
+            return prompt
+
+        else:
+            raise TypeError("prompt必须是字符串或消息列表")
+
+    def create_conversation(self, system_prompt: Optional[str] = None) -> 'Conversation':
+        """
+        创建新的对话会话。
+
+        Args:
+            system_prompt: 可选的系统提示
+
+        Returns:
+            新的对话会话对象
+        """
+        return Conversation(self, system_prompt)
+
+
+class Conversation:
+    """
+    管理与LLM的持续多轮对话。
+    """
+
+    def __init__(self, llm_provider: LLMProvider, system_prompt: Optional[str] = None):
+        """
+        初始化对话。
+
+        Args:
+            llm_provider: LLM提供者实例
+            system_prompt: 可选的系统提示
+        """
+        self.llm = llm_provider
+        self.messages = []
+
+        # 如果有系统提示，添加到消息中
+        if system_prompt:
+            self.messages.append({
+                "role": "system",
+                "content": system_prompt
+            })
+
+        # 对话元数据
+        self.created_at = datetime.now().isoformat()
+        self.turn_count = 0
+
+    def add_message(self, role: str, content: str) -> None:
+        """
+        向对话添加消息。
+
+        Args:
+            role: 消息角色 ("user", "assistant", "system")
+            content: 消息内容
+        """
+        if role not in ["user", "assistant", "system"]:
+            raise ValueError(f"无效的消息角色: {role}")
+
+        self.messages.append({
+            "role": role,
+            "content": content
+        })
+
+        # 只有用户和助手消息计入对话轮次
+        if role in ["user", "assistant"]:
+            self.turn_count += 1
+
+    def get_user_input(self, user_input: str) -> str:
+        """
+        添加用户输入并获取助手回复。
+
+        Args:
+            user_input: 用户输入文本
+
+        Returns:
+            助手回复文本
+        """
+        # 添加用户消息
+        self.add_message("user", user_input)
+
+        # 获取助手回复
+        response = self.llm.generate(self.messages)
+
+        # 添加助手回复到对话历史
+        self.add_message("assistant", response)
+
+        return response
+
+    def get_function_call(self, user_input: str, functions: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        添加用户输入并获取函数调用结果。
+
+        Args:
+            user_input: 用户输入文本
+            functions: 函数定义列表
+
+        Returns:
+            函数调用结果
+        """
+        # 添加用户消息
+        self.add_message("user", user_input)
+
+        # 获取函数调用结果
+        result = self.llm.generate_with_function_calling(self.messages, functions)
+
+        # 如果是文本响应，添加到对话历史
+        if "text" in result:
+            self.add_message("assistant", result["text"])
+
+        return result
+
+    def clear_history(self, keep_system_prompt: bool = True) -> None:
+        """
+        清除对话历史。
+
+        Args:
+            keep_system_prompt: 是否保留系统提示
+        """
+        if keep_system_prompt and self.messages and self.messages[0]["role"] == "system":
+            system_message = self.messages[0]
+            self.messages = [system_message]
+        else:
+            self.messages = []
+
+        self.turn_count = 0
+
+    def get_messages(self) -> List[Dict[str, Any]]:
+        """获取所有消息。"""
+        return self.messages.copy()
+
+    def get_last_turn(self) -> tuple:
+        """
+        获取最后一轮对话（用户输入和助手回复）。
+
+        Returns:
+            (用户输入, 助手回复)元组，如果没有完整的对话轮次则返回(None, None)
+        """
+        user_msg = None
+        assistant_msg = None
+
+        # 从后向前查找
+        for i in range(len(self.messages)-1, -1, -1):
+            msg = self.messages[i]
+            if msg["role"] == "assistant" and assistant_msg is None:
+                assistant_msg = msg["content"]
+            elif msg["role"] == "user" and assistant_msg is not None and user_msg is None:
+                user_msg = msg["content"]
+                break
+
+        return (user_msg, assistant_msg)
+```
+
+#### router.py
+```python
+from typing import Dict, Any
+
+class Router:
+    """
+    组件通信的中央路由系统。
+
+    处理组件间的函数调用路由，提供统一的组件间通信接口。
+    """
+
+    def __init__(self):
+        """初始化路由器"""
+        self.components = {}  # 存储注册组件的字典
+
+    def register(self, name: str, component) -> None:
+        """
+        向路由器注册组件。
+
+        Args:
+            name: 组件的字符串标识符
+            component: 组件实例
+        """
+        self.components[name] = component
+
+    def route(self, function_call: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        将函数调用路由到适当的组件。
+
+        Args:
+            function_call: 包含'function'和'parameters'键的字典
+
+        Returns:
+            被调用组件的结果
+
+        Raises:
+            ValueError: 如果找不到组件或方法
+        """
+        # 解析函数调用
+        function_path = function_call.get("function", "")
+        parameters = function_call.get("parameters", {})
+
+        if "." not in function_path:
+            raise ValueError(f"无效的函数路径: {function_path}。预期格式: 'component.method'")
+
+        component_name, method_name = function_path.split(".", 1)
+
+        # 获取组件
+        component = self.components.get(component_name)
+        if not component:
+            raise ValueError(f"未找到组件: {component_name}")
+
+        # 获取方法
+        method = getattr(component, method_name, None)
+        if not method or not callable(method):
+            raise ValueError(f"未找到方法: {method_name} in component {component_name}")
+
+        # 执行方法
+        try:
+            return method(**parameters)
+        except Exception as e:
+            # 实际实现中会包含更复杂的错误处理、日志记录和可能的重试逻辑
+            return {
+                "error": str(e),
+                "component": component_name,
+                "method": method_name,
+                "status": "failed"
+            }
+```
+
+### Directory: aisr\memory/
+
+#### __init__.py
+```python
+"""记忆系统组件"""
+
+from aisr.memory.base import Memory
+from aisr.memory.global_memory import GlobalMemory
+from aisr.memory.agent_memory import AgentMemory
+from aisr.memory.workflow_memory import WorkflowMemory
+from aisr.memory.manager import MemoryManager
+```
+
+#### agent_memory.py
+```python
+"""
+智能体内存模块，用于管理智能体的历史记忆和上下文。
+"""
+
+import logging
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+
+from aisr.memory.base import Memory
+
+
+class AgentMemory(Memory):
+    """
+    智能体专用的内存系统。
+
+    用于存储智能体的交互历史，跟踪思考过程，
+    并为后续提示构建提供上下文。
+    """
+
+    def __init__(self, agent_name: str):
+        """
+        初始化智能体内存。
+
+        Args:
+            agent_name: 智能体的名称
+        """
+        self.agent_name = agent_name
+        self.interactions = []  # 存储智能体的交互历史
+        self.metadata = {}  # 存储额外的元数据
+        logging.debug(f"已初始化 {agent_name} 的智能体内存")
+
+    def add(self, entry: Dict[str, Any]) -> None:
+        """
+        向内存添加新的交互记录。
+
+        Args:
+            entry: 包含交互数据的字典。应包含'input'和'output'字段，
+                  可选包含'timestamp'和'metadata'。
+        """
+        # 确保必要的字段存在
+        if "input" not in entry:
+            logging.warning("添加到智能体内存的条目缺少'input'字段")
+            entry["input"] = {}
+
+        if "output" not in entry:
+            logging.warning("添加到智能体内存的条目缺少'output'字段")
+            entry["output"] = {}
+
+        # 添加时间戳（如果没有提供）
+        if "timestamp" not in entry:
+            entry["timestamp"] = datetime.now().isoformat()
+
+        # 添加到交互历史
+        self.interactions.append(entry)
+        logging.debug(f"{self.agent_name} 内存: 已添加新的交互记录")
+
+    def get_relevant(self, context: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        检索与当前上下文相关的历史交互。
+
+        Args:
+            context: 包含检索参数的字典
+                - max_items: 返回的最大项目数（默认5）
+                - recency_weight: 最近项目的权重（0-1）
+                - relevance_key: 在上下文中用于相关性评估的键
+
+        Returns:
+            相关交互的列表
+        """
+        # 获取参数
+        max_items = context.get("max_items", 5)
+        recency_weight = min(max(context.get("recency_weight", 0.7), 0), 1)
+
+        # 如果没有足够的交互，返回所有
+        if len(self.interactions) <= max_items:
+            return self.interactions.copy()
+
+        # 强调最近的交互
+        if recency_weight > 0.9:
+            # 如果最近性非常重要，只返回最近的项目
+            return self.interactions[-max_items:]
+
+        # 这里可以实现更复杂的相关性逻辑
+        # 目前简单地综合考虑最近性，保留一些最近的和一些较早的交互
+        recent_count = int(max_items * recency_weight)
+        older_count = max_items - recent_count
+
+        recent_items = self.interactions[-recent_count:] if recent_count > 0 else []
+        older_items = self.interactions[:-recent_count][:older_count] if older_count > 0 else []
+
+        return older_items + recent_items
+
+    def clear(self) -> None:
+        """清除所有存储的交互。"""
+        self.interactions = []
+        logging.debug(f"{self.agent_name} 内存: 已清除所有交互")
+
+    def summarize(self, context: Dict[str, Any] = None) -> str:
+        """
+        创建交互历史的简洁摘要。
+
+        Args:
+            context: 可选的上下文参数字典
+
+        Returns:
+            内存内容的摘要字符串
+        """
+        if not self.interactions:
+            return "没有历史交互。"
+
+        # 创建摘要
+        total_interactions = len(self.interactions)
+        recent_interactions = min(3, total_interactions)
+
+        summary = [f"{self.agent_name} 的交互历史摘要:"]
+        summary.append(f"总交互数: {total_interactions}")
+
+        if recent_interactions > 0:
+            summary.append("\n最近的交互:")
+            for i in range(1, recent_interactions + 1):
+                interaction = self.interactions[-i]
+                summary.append(f"- {interaction.get('timestamp', 'Unknown time')}: " +
+                               f"输入类型: {type(interaction.get('input', {})).__name__}, " +
+                               f"输出类型: {type(interaction.get('output', {})).__name__}")
+
+        return "\n".join(summary)
+
+    def get_last_interaction(self) -> Optional[Dict[str, Any]]:
+        """获取最近的一次交互。"""
+        if not self.interactions:
+            return None
+        return self.interactions[-1]
+
+    def set_metadata(self, key: str, value: Any) -> None:
+        """
+        设置内存元数据。
+
+        Args:
+            key: 元数据键
+            value: 元数据值
+        """
+        self.metadata[key] = value
+
+    def get_metadata(self, key: str, default: Any = None) -> Any:
+        """
+        获取内存元数据。
+
+        Args:
+            key: 元数据键
+            default: 默认值，如果键不存在
+
+        Returns:
+            元数据值或默认值
+        """
+        return self.metadata.get(key, default)
+```
+
+#### base.py
+```python
+import abc
+from typing import Dict, Any
+
+class Memory(abc.ABC):
+    """
+    AISR内存系统的抽象基类。
+
+    负责在研究过程中存储、检索和管理信息状态。
+    """
+
+    @abc.abstractmethod
+    def add(self, entry: Dict[str, Any]) -> None:
+        """
+        向内存添加新条目。
+
+        Args:
+            entry: 包含要存储数据的字典
+        """
+        pass
+
+    @abc.abstractmethod
+    def get_relevant(self, context: Dict[str, Any]) -> list[Dict[str, Any]]:
+        """
+        基于提供的上下文检索相关内存。
+
+        Args:
+            context: 包含指导内存检索的参数的字典
+
+        Returns:
+            相关内存条目的列表
+        """
+        pass
+
+    @abc.abstractmethod
+    def clear(self) -> None:
+        """清除所有存储的内存"""
+        pass
+
+    def summarize(self, context: Dict[str, Any] = None) -> str:
+        """创建相关内存的简洁摘要"""
+        return ""  # 默认实现，子类应重写
+```
+
+#### global_memory.py
+```python
+"""
+全局内存模块，为整个AISR系统提供共享状态。
+"""
+
+import logging
+from typing import Dict, Any, List, Optional
+
+
+class GlobalMemory:
+    """
+    全局内存类，存储整个研究会话的共享状态。
+
+    不同于其他内存类，GlobalMemory不是从Memory基类继承的，
+    因为它有特殊的接口和用途。
+    """
+
+    def __init__(self):
+        """初始化全局内存。"""
+        self._store = {}
+        logging.debug("全局内存已初始化")
+
+    def set(self, key: str, value: Any) -> None:
+        """
+        设置全局状态值。
+
+        Args:
+            key: 状态键
+            value: 状态值
+        """
+        self._store[key] = value
+        logging.debug(f"全局内存: 已设置 '{key}'")
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """
+        获取全局状态值。
+
+        Args:
+            key: 状态键
+            default: 如果键不存在，返回的默认值
+
+        Returns:
+            关联的状态值，如果不存在则返回默认值
+        """
+        return self._store.get(key, default)
+
+    def delete(self, key: str) -> None:
+        """
+        删除全局状态键。
+
+        Args:
+            key: 要删除的状态键
+        """
+        if key in self._store:
+            del self._store[key]
+            logging.debug(f"全局内存: 已删除 '{key}'")
+
+    def clear(self) -> None:
+        """清除所有全局状态。"""
+        self._store.clear()
+        logging.debug("全局内存: 已清除所有数据")
+
+    def clear_research_data(self) -> None:
+        """清除研究相关数据，但保留系统配置。"""
+        # 保留的键列表 - 通常是系统配置
+        preserved_keys = ["config", "system_settings"]
+
+        # 创建包含保留键值的新存储
+        preserved_data = {k: self._store[k] for k in preserved_keys if k in self._store}
+
+        # 清除所有数据
+        self._store.clear()
+
+        # 恢复保留的数据
+        self._store.update(preserved_data)
+
+        logging.debug("全局内存: 已清除研究数据，保留系统配置")
+
+    def get_all(self) -> Dict[str, Any]:
+        """
+        获取所有全局状态。
+
+        Returns:
+            包含所有状态键值对的字典
+        """
+        return self._store.copy()
+```
+
+#### manager.py
+```python
+"""
+内存管理系统，负责管理AISR系统中的各类记忆。
+"""
+
+import logging
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+
+from aisr.memory.base import Memory
+from aisr.memory.global_memory import GlobalMemory
+from aisr.memory.agent_memory import AgentMemory
+from aisr.memory.workflow_memory import WorkflowMemory
+
+
+class MemoryManager:
+    """
+    AISR系统的中央内存管理器。
+
+    负责创建和管理各种内存视图，包括全局内存、智能体内存和工作流内存。
+    """
+
+    def __init__(self):
+        """初始化内存管理器。"""
+        # 全局内存存储整个研究会话的状态
+        self.global_memory = GlobalMemory()
+
+        # 各组件的专用内存
+        self.component_memories: Dict[str, Memory] = {}
+
+        logging.info("内存管理器初始化完成")
+
+    def get_memory_view(self, component_name: str) -> Memory:
+        """
+        获取或创建组件的内存视图。
+
+        Args:
+            component_name: 组件名称
+
+        Returns:
+            组件的内存视图
+        """
+        if component_name not in self.component_memories:
+            # 根据组件名称确定内存类型
+            if "_agent" in component_name:
+                self.component_memories[component_name] = AgentMemory(component_name)
+            elif "_workflow" in component_name:
+                self.component_memories[component_name] = WorkflowMemory(component_name)
+            else:
+                # 默认为工作流内存
+                self.component_memories[component_name] = WorkflowMemory(component_name)
+
+            logging.debug(f"为组件 '{component_name}' 创建了新的内存视图")
+
+        return self.component_memories[component_name]
+
+    def save_global_state(self, key: str, value: Any) -> None:
+        """
+        保存状态到全局内存。
+
+        Args:
+            key: 状态键
+            value: 状态值
+        """
+        self.global_memory.set(key, value)
+
+    def get_global_state(self, key: str, default: Any = None) -> Any:
+        """
+        从全局内存获取状态。
+
+        Args:
+            key: 状态键
+            default: 如果键不存在，返回的默认值
+
+        Returns:
+            关联的状态值，如果不存在则返回默认值
+        """
+        return self.global_memory.get(key, default)
+
+    def clear_research_state(self) -> None:
+        """清除当前研究状态，为新研究做准备。"""
+        # 清除全局内存中的研究相关状态
+        self.global_memory.clear_research_data()
+
+        # 清除所有组件内存
+        for memory in self.component_memories.values():
+            memory.clear()
+
+        # 记录新的研究开始
+        self.global_memory.set("research_start_time", datetime.now().isoformat())
+        logging.info("已清除研究状态，准备新的研究")
+
+    def record_research_step(self, step_name: str, data: Dict[str, Any]) -> None:
+        """
+        记录研究步骤到历史记录。
+
+        Args:
+            step_name: 步骤名称
+            data: 步骤数据
+        """
+        # 获取现有历史记录
+        history = self.global_memory.get("research_history", [])
+
+        # 添加新步骤
+        step_record = {
+            "step": step_name,
+            "timestamp": datetime.now().isoformat(),
+            "data": data
+        }
+
+        history.append(step_record)
+        self.global_memory.set("research_history", history)
+```
+
+#### workflow_memory.py
+```python
+"""
+工作流内存模块，用于管理工作流执行状态和结果。
+"""
+
+import logging
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+
+from aisr.memory.base import Memory
+
+
+class WorkflowMemory(Memory):
+    """
+    工作流专用的内存系统。
+
+    存储工作流的执行状态、中间结果和执行历史，
+    为工作流的连续和迭代执行提供状态管理。
+    """
+
+    def __init__(self, workflow_name: str):
+        """
+        初始化工作流内存。
+
+        Args:
+            workflow_name: 工作流的名称
+        """
+        self.workflow_name = workflow_name
+        self.steps = {}  # 存储步骤结果 {step_name: [result1, result2, ...]}
+        self.state = {}  # 存储工作流状态
+        self.history = []  # 存储执行历史
+        logging.debug(f"已初始化 {workflow_name} 的工作流内存")
+
+    def add(self, entry: Dict[str, Any]) -> None:
+        """
+        添加工作流步骤结果或状态更新。
+
+        Args:
+            entry: 要添加的数据字典，必须包含'type'键，值为'step_result'或'state_update'
+                  对于'step_result'类型，还需要'step_name'和'result'键
+                  对于'state_update'类型，还需要'key'和'value'键
+        """
+        entry_type = entry.get("type")
+        timestamp = entry.get("timestamp", datetime.now().isoformat())
+
+        # 添加执行历史
+        history_entry = {
+            "timestamp": timestamp,
+            "type": entry_type
+        }
+
+        if entry_type == "step_result":
+            step_name = entry.get("step_name")
+            result = entry.get("result")
+
+            if not step_name:
+                logging.warning("工作流内存: 步骤结果缺少步骤名称")
+                return
+
+            # 初始化步骤结果列表（如果不存在）
+            if step_name not in self.steps:
+                self.steps[step_name] = []
+
+            # 添加结果
+            self.steps[step_name].append(result)
+
+            # 更新历史条目
+            history_entry.update({
+                "step_name": step_name,
+                "result_summary": self._summarize_result(result)
+            })
+
+            logging.debug(f"{self.workflow_name} 内存: 已添加 '{step_name}' 步骤的结果")
+
+        elif entry_type == "state_update":
+            key = entry.get("key")
+            value = entry.get("value")
+
+            if not key:
+                logging.warning("工作流内存: 状态更新缺少键")
+                return
+
+            # 更新状态
+            self.state[key] = value
+
+            # 更新历史条目
+            history_entry.update({
+                "state_key": key,
+                "value_summary": str(value)[:100] + "..." if isinstance(value, str) and len(str(value)) > 100 else str(
+                    value)
+            })
+
+            logging.debug(f"{self.workflow_name} 内存: 已更新状态 '{key}'")
+
+        else:
+            logging.warning(f"工作流内存: 未知的条目类型: {entry_type}")
+            return
+
+        # 添加到历史
+        self.history.append(history_entry)
+
+    def get_relevant(self, context: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        检索与上下文相关的内存内容。
+
+        Args:
+            context: 包含检索参数的字典
+                - step_name: 特定步骤名称（可选）
+                - state_keys: 需要的状态键列表（可选）
+                - include_history: 是否包含历史（默认False）
+
+        Returns:
+            相关内存条目的列表
+        """
+        result = []
+
+        # 检索特定步骤的结果
+        step_name = context.get("step_name")
+        if step_name and step_name in self.steps:
+            for step_result in self.steps[step_name]:
+                result.append({
+                    "type": "step_result",
+                    "step_name": step_name,
+                    "result": step_result
+                })
+
+        # 检索所有步骤的最新结果
+        if context.get("latest_steps", False):
+            for step_name, results in self.steps.items():
+                if results:  # 如果有结果
+                    result.append({
+                        "type": "step_result",
+                        "step_name": step_name,
+                        "result": results[-1]  # 最新结果
+                    })
+
+        # 检索请求的状态键
+        state_keys = context.get("state_keys", [])
+        if state_keys:
+            for key in state_keys:
+                if key in self.state:
+                    result.append({
+                        "type": "state",
+                        "key": key,
+                        "value": self.state[key]
+                    })
+
+        # 可选包含历史
+        if context.get("include_history", False):
+            result.append({
+                "type": "history",
+                "entries": self.history
+            })
+
+        return result
+
+    def clear(self) -> None:
+        """清除所有存储的内存。"""
+        self.steps = {}
+        self.state = {}
+        self.history = []
+        logging.debug(f"{self.workflow_name} 内存: 已清除所有数据")
+
+    def summarize(self, context: Dict[str, Any] = None) -> str:
+        """
+        创建工作流内存内容的摘要。
+
+        Args:
+            context: 可选的上下文参数
+
+        Returns:
+            内存内容的摘要字符串
+        """
+        summary_parts = [f"{self.workflow_name} 工作流内存摘要:"]
+
+        # 步骤摘要
+        if self.steps:
+            step_summary = []
+            for step_name, results in self.steps.items():
+                step_summary.append(f"- {step_name}: {len(results)} 个结果")
+            summary_parts.append("步骤结果:\n" + "\n".join(step_summary))
+        else:
+            summary_parts.append("步骤结果: 无")
+
+        # 状态摘要
+        if self.state:
+            state_summary = []
+            for key, value in self.state.items():
+                value_str = str(value)
+                if len(value_str) > 50:
+                    value_str = value_str[:47] + "..."
+                state_summary.append(f"- {key}: {value_str}")
+            summary_parts.append("工作流状态:\n" + "\n".join(state_summary))
+        else:
+            summary_parts.append("工作流状态: 无")
+
+        # 历史摘要
+        if self.history:
+            summary_parts.append(f"执行历史: {len(self.history)} 个条目")
+        else:
+            summary_parts.append("执行历史: 无")
+
+        return "\n\n".join(summary_parts)
+
+    def _summarize_result(self, result: Any) -> str:
+        """创建结果的简短摘要。"""
+        if isinstance(result, dict):
+            # 提取关键信息
+            keys = list(result.keys())
+            return f"字典 ({len(keys)} 个键: {', '.join(keys[:3])}{'...' if len(keys) > 3 else ''})"
+        elif isinstance(result, list):
+            return f"列表 ({len(result)} 项)"
+        elif isinstance(result, str):
+            return result[:50] + "..." if len(result) > 50 else result
+        else:
+            return str(result)
+
+    def save_result(self, step_name: str, result: Any) -> None:
+        """
+        保存步骤结果的便捷方法。
+
+        Args:
+            step_name: 步骤名称
+            result: 步骤结果
+        """
+        self.add({
+            "type": "step_result",
+            "step_name": step_name,
+            "result": result,
+            "timestamp": datetime.now().isoformat()
+        })
+
+    def update_state(self, key: str, value: Any) -> None:
+        """
+        更新工作流状态的便捷方法。
+
+        Args:
+            key: 状态键
+            value: 状态值
+        """
+        self.add({
+            "type": "state_update",
+            "key": key,
+            "value": value,
+            "timestamp": datetime.now().isoformat()
+        })
+
+    def get_latest_result(self, step_name: str) -> Optional[Any]:
+        """
+        获取步骤的最新结果。
+
+        Args:
+            step_name: 步骤名称
+
+        Returns:
+            最新结果，如果步骤不存在则返回None
+        """
+        if step_name not in self.steps or not self.steps[step_name]:
+            return None
+        return self.steps[step_name][-1]
+
+    def get_all_results(self, step_name: str) -> List[Any]:
+        """
+        获取步骤的所有结果。
+
+        Args:
+            step_name: 步骤名称
+
+        Returns:
+            结果列表，如果步骤不存在则返回空列表
+        """
+        return self.steps.get(step_name, [])
+
+    def get_state(self, key: str, default: Any = None) -> Any:
+        """
+        获取工作流状态值。
+
+        Args:
+            key: 状态键
+            default: 如果键不存在，返回的默认值
+
+        Returns:
+            状态值或默认值
+        """
+        return self.state.get(key, default)
+```
+
+### Directory: aisr\tests/
+
+#### __init__.py
+```python
+
+```
+
+### Directory: aisr\tools/
+
+#### __init__.py
+```python
+"""工具组件"""
+
+from aisr.tools.base import Tool
+from aisr.tools.web_search import WebSearchTool
+from aisr.tools.web_crawler import WebCrawlerTool
+```
+
+#### base.py
+```python
+import abc
+from typing import Dict, Any
+from aisr.core.base import Component
+
+class Tool(Component):
+    """
+    AISR中所有工具的抽象基类。
+
+    工具是执行特定功能的组件，如网页搜索、爬取、数据处理等。
+    """
+
+    @abc.abstractmethod
+    def execute(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """执行工具的功能"""
+        pass
+
+    @abc.abstractmethod
+    def get_description(self) -> str:
+        """获取此工具在LLM提示中使用的描述"""
+        pass
+
+    def is_available(self) -> bool:
+        """检查此工具当前是否可用"""
+        return True  # 默认实现，子类应根据需要重写
+```
+
+#### web_crawler.py
+```python
+
+```
+
+#### web_search.py
+```python
+
+```
+
+### Directory: aisr\utils/
+
+#### __init__.py
+```python
+
+```
+
+#### error_handling.py
+```python
+
+```
+
+#### logging.py
+```python
+"""
+日志工具模块，为AISR系统提供日志记录功能。
+"""
+
+import logging
+import sys
+from typing import Optional
+
+
+def setup_logging(log_level: str = "INFO", log_file: Optional[str] = None) -> None:
+    """
+    设置日志配置。
+
+    Args:
+        log_level: 日志级别 ("DEBUG", "INFO", "WARNING", "ERROR")
+        log_file: 可选的日志文件路径
+    """
+    # 转换日志级别字符串为常量
+    level = getattr(logging, log_level.upper(), logging.INFO)
+
+    # 基本配置
+    handlers = [logging.StreamHandler(sys.stdout)]
+
+    # 如果提供了日志文件，添加文件处理器
+    if log_file:
+        handlers.append(logging.FileHandler(log_file))
+
+    # 配置日志
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=handlers
+    )
+
+    # 设置特定库的日志级别
+    # 例如，将一些噪音大的库设置为更高级别
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.WARNING)
+
+    logging.info(f"日志系统已配置，级别: {log_level}")
+
+
+def get_logger(name: str) -> logging.Logger:
+    """
+    获取命名的日志记录器。
+
+    Args:
+        name: 日志记录器名称
+
+    Returns:
+        命名的日志记录器
+    """
+    return logging.getLogger(name)
+```
+
+### Directory: aisr\workflows/
+
+#### __init__.py
+```python
+"""工作流组件"""
+
+from aisr.workflows.base import Workflow
+from aisr.workflows.task_planning import TaskPlanningWorkflow
+from aisr.workflows.search_planning import SearchPlanningWorkflow
+from aisr.workflows.sub_answer import SubAnswerWorkflow
+from aisr.workflows.research import ResearchWorkflow
+```
+
+#### base.py
+```python
+import abc
+from typing import Dict, Any
+from aisr.core.base import Component
+
+class Workflow(Component):
+    """
+    AISR中所有工作流组件的抽象基类。
+
+    工作流负责编排执行流程，协调Agent和Tool完成特定任务。
+    """
+
+    def __init__(self, router, memory):
+        """
+        初始化工作流。
+
+        Args:
+            router: 用于调用其他组件的路由器
+            memory: 工作流的内存系统
+        """
+        self.router = router
+        self.memory = memory
+
+    @abc.abstractmethod
+    def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """执行工作流逻辑"""
+        pass
+
+    def call_component(self, function: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        通过路由器调用另一个组件。
+
+        Args:
+            function: 要调用的函数的字符串标识符
+            parameters: 要传递的参数字典
+
+        Returns:
+            被调用组件的结果
+        """
+        return self.router.route({"function": function, "parameters": parameters})
+```
+
+#### research.py
+```python
+"""
+研究工作流模块，协调整个研究过程。
+
+实现最外层任务规划循环，负责整体研究流程控制。
+"""
+
+import logging
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+
+from aisr.workflows.base import Workflow
+
+
+class ResearchWorkflow(Workflow):
+    """
+    主研究工作流，实现最外层任务规划循环。
+
+    负责整体研究方向把控，包括任务规划、执行结果评估、
+    重规划决策和最终答案生成。不涉及具体任务执行细节。
+    """
+
+    def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行最外层研究规划循环。
+
+        Args:
+            context: 包含研究查询的上下文
+                - query: 研究查询
+
+        Returns:
+            最终研究结果
+        """
+        query = context.get("query")
+        if not query:
+            error_msg = "缺少研究查询"
+            logging.error(error_msg)
+            return {"error": error_msg}
+
+        logging.info(f"开始研究工作流: '{query}'")
+        self.memory.update_state("query", query)
+        self.memory.update_state("start_time", datetime.now().isoformat())
+
+        try:
+            # 初始化研究状态
+            self.memory.update_state("current_planning_iteration", 0)
+            self.memory.update_state("sub_answers", {})
+
+            # 记录研究开始
+            self._record_step("research_started", {
+                "query": query,
+                "timestamp": datetime.now().isoformat()
+            })
+
+            # 获取初始复杂度估计（用于设置最大规划迭代次数）
+            complexity = self._estimate_initial_complexity(query)
+            max_planning_iterations = self._get_max_iterations(complexity)
+            self.memory.update_state("complexity", complexity)
+            self.memory.update_state("max_planning_iterations", max_planning_iterations)
+
+            # ======== 任务规划循环（最外层循环）========
+            current_planning_iteration = 0
+            accumulated_sub_answers = {}  # 累积所有子回答
+
+            while current_planning_iteration < max_planning_iterations:
+                iteration_number = current_planning_iteration + 1
+                logging.info(f"开始任务规划迭代 {iteration_number}/{max_planning_iterations}")
+                self.memory.update_state("current_planning_iteration", iteration_number)
+
+                # 记录规划迭代开始
+                self._record_step("planning_iteration_started", {
+                    "iteration": iteration_number,
+                    "max_iterations": max_planning_iterations
+                })
+
+                # 1. 任务规划阶段 - 生成/重新规划研究任务
+                planning_context = {
+                    "query": query
+                }
+
+                # 如果不是第一次迭代，添加前一轮的结果以用于重规划
+                if current_planning_iteration > 0:
+                    planning_context["previous_plan"] = self.memory.get_latest_result("task_planning")
+                    planning_context["previous_answers"] = accumulated_sub_answers
+
+                # 执行任务规划
+                task_plan = self.call_component("task_plan_agent.plan_research", planning_context)
+                self.memory.save_result("task_planning", task_plan)
+
+                # 获取子任务列表
+                sub_tasks = task_plan.get("sub_tasks", [])
+                self.memory.update_state("sub_tasks", sub_tasks)
+
+                # 更新复杂度（如有变化）
+                complexity = task_plan.get("complexity", complexity)
+                self.memory.update_state("complexity", complexity)
+
+                # 2. 任务执行阶段 - 将任务委托给任务执行工作流
+                # 任务执行工作流负责搜索规划和搜索执行
+                execution_result = self.call_component("task_executing_search_planning.execute", {
+                    "query": query,
+                    "sub_tasks": sub_tasks,
+                    "previous_answers": accumulated_sub_answers
+                })
+
+                # 获取本轮执行结果并累积
+                iteration_answers = execution_result.get("sub_answers", {})
+                accumulated_sub_answers.update(iteration_answers)
+
+                # 记录本轮迭代结果
+                self.memory.save_result(f"iteration_answers_{iteration_number}", iteration_answers)
+                self.memory.update_state("sub_answers", accumulated_sub_answers)
+
+                # 3. 洞察生成 - 分析当前研究进展
+                insights = self._generate_insights(query, accumulated_sub_answers)
+                self.memory.save_result(f"insights_iteration_{iteration_number}", insights)
+
+                # 记录规划迭代完成
+                self._record_step("planning_iteration_completed", {
+                    "iteration": iteration_number,
+                    "new_sub_answers": len(iteration_answers),
+                    "total_sub_answers": len(accumulated_sub_answers)
+                })
+
+                # 4. 决策阶段 - 确定是否需要继续规划迭代
+                # 检查是否需要继续研究（基于洞察）
+                if not self._needs_more_research(insights, current_planning_iteration, max_planning_iterations):
+                    logging.info("研究目标已满足，不需要更多规划迭代")
+                    break
+
+                # 考虑用户交互
+                if self._should_interact_with_user(current_planning_iteration, complexity):
+                    user_feedback = self._request_user_feedback("规划迭代", {
+                        "iteration": iteration_number,
+                        "max_iterations": max_planning_iterations,
+                        "insights_summary": self._summarize_insights(insights)
+                    })
+
+                    if not self._should_continue_based_on_feedback(user_feedback):
+                        logging.info("根据用户反馈停止规划迭代")
+                        break
+
+                # 准备下一轮规划迭代
+                current_planning_iteration += 1
+
+            # ======== 答案生成阶段 ========
+            # 使用累积的子回答生成最终答案
+            final_insights = self._generate_insights(query, accumulated_sub_answers)
+
+            # 规划答案结构
+            answer_plan = self._plan_answer(query, accumulated_sub_answers, final_insights)
+
+            # 生成最终答案
+            final_answer = self._generate_answer(query, accumulated_sub_answers, answer_plan)
+
+            # 记录研究完成
+            self._record_step("research_completed", {
+                "query": query,
+                "planning_iterations": current_planning_iteration + 1,
+                "sub_tasks_completed": len(accumulated_sub_answers),
+                "end_time": datetime.now().isoformat()
+            })
+
+            return final_answer
+
+        except Exception as e:
+            logging.error(f"研究工作流执行错误: {str(e)}")
+            # 记录错误
+            self._record_step("research_error", {
+                "query": query,
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            })
+
+            return {
+                "error": f"研究执行失败: {str(e)}",
+                "query": query,
+                "partial_results": self.memory.get_state("sub_answers", {})
+            }
+
+    def _estimate_initial_complexity(self, query: str) -> str:
+        """
+        初步估计查询复杂度，用于设置初始迭代次数。
+
+        Args:
+            query: 研究查询
+
+        Returns:
+            复杂度评估: "simple", "medium", 或 "complex"
+        """
+        # 直接调用任务规划代理
+        result = self.call_component("task_plan_agent.estimate_complexity", {
+            "query": query
+        })
+
+        complexity = result.get("complexity", "medium")
+        logging.info(f"初步复杂度评估: {complexity}")
+
+        return complexity
+
+    def _generate_insights(self, query: str, sub_answers: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        生成研究洞察，评估当前研究进展。
+
+        Args:
+            query: 研究查询
+            sub_answers: 累积的子回答集合
+
+        Returns:
+            研究洞察
+        """
+        # 调用洞察代理
+        result = self.call_component("insight_agent.analyze_results", {
+            "query": query,
+            "sub_answers": sub_answers
+        })
+
+        return result
+
+    def _plan_answer(self, query: str, sub_answers: Dict[str, Any], insights: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        规划答案结构。
+
+        Args:
+            query: 研究查询
+            sub_answers: 子回答集合
+            insights: 研究洞察
+
+        Returns:
+            答案计划
+        """
+        # 调用答案规划代理
+        result = self.call_component("answer_plan_agent.plan_answer", {
+            "query": query,
+            "sub_answers": sub_answers,
+            "insights": insights
+        })
+
+        self.memory.save_result("answer_plan", result)
+        return result
+
+    def _generate_answer(self, query: str, sub_answers: Dict[str, Any], answer_plan: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        生成最终答案。
+
+        Args:
+            query: 研究查询
+            sub_answers: 子回答集合
+            answer_plan: 答案计划
+
+        Returns:
+            最终答案
+        """
+        # 调用答案代理
+        result = self.call_component("answer_agent.generate_answer", {
+            "query": query,
+            "sub_answers": sub_answers,
+            "plan": answer_plan
+        })
+
+        self.memory.save_result("final_answer", result)
+        return result
+
+    def _get_max_iterations(self, complexity: str) -> int:
+        """基于复杂度确定最大迭代次数。"""
+        if complexity == "simple":
+            return 1
+        elif complexity == "medium":
+            return 2
+        else:  # complex
+            return 3
+
+    def _needs_more_research(self, insights: Dict[str, Any], current_iteration: int, max_iterations: int) -> bool:
+        """
+        确定是否需要更多规划迭代，基于研究洞察。
+
+        Args:
+            insights: 当前的研究洞察
+            current_iteration: 当前迭代索引
+            max_iterations: 最大迭代次数
+
+        Returns:
+            是否需要继续研究
+        """
+        # 如果已达到最大迭代次数
+        if current_iteration >= max_iterations - 1:
+            return False
+
+        # 检查未回答的问题
+        unanswered_questions = insights.get("unanswered_questions", [])
+        if len(unanswered_questions) > 1:
+            return True
+
+        # 检查分歧点
+        areas_of_disagreement = insights.get("areas_of_disagreement", [])
+        if len(areas_of_disagreement) > 1:
+            return True
+
+        # 检查意外发现
+        unexpected_findings = insights.get("unexpected_findings", [])
+        if len(unexpected_findings) > 0 and current_iteration < 1:
+            return True
+
+        # 默认不需要更多研究
+        return False
+
+    def _should_interact_with_user(self, current_iteration: int, complexity: str) -> bool:
+        """
+        确定是否应该与用户交互，基于迭代和复杂度。
+
+        Args:
+            current_iteration: 当前迭代索引
+            complexity: 研究复杂度
+
+        Returns:
+            是否应该交互
+        """
+        if complexity == "complex":
+            return True  # 复杂查询总是请求用户反馈
+        elif complexity == "medium" and current_iteration >= 1:
+            return True  # 中等复杂度在第一次迭代后请求反馈
+
+        return False
+
+    def _request_user_feedback(self, interaction_point: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        请求用户反馈（模拟）。
+
+        在实际实现中，这将调用UI组件或API来获取用户输入。
+        这里我们提供一个简单的模拟实现。
+        """
+        # 记录交互点
+        self._record_step("user_interaction_requested", {
+            "interaction_point": interaction_point,
+            "context": context
+        })
+
+        # 模拟用户反馈 - 在实际实现中应替换为真实交互
+        return {
+            "continue": True,
+            "feedback": "继续研究",
+            "timestamp": datetime.now().isoformat()
+        }
+
+    def _should_continue_based_on_feedback(self, feedback: Dict[str, Any]) -> bool:
+        """根据用户反馈决定是否继续研究。"""
+        return feedback.get("continue", True)
+
+    def _record_step(self, step_name: str, data: Dict[str, Any]) -> None:
+        """记录研究步骤。"""
+        # 保存到工作流内存
+        self.memory.save_result(step_name, data)
+
+        # 更新研究历史
+        self.call_component("memory_manager.record_research_step", {
+            "step_name": step_name,
+            "data": data
+        })
+
+    def _summarize_insights(self, insights: Dict[str, Any]) -> str:
+        """创建洞察的简短摘要。"""
+        summary_parts = ["研究洞察摘要:"]
+
+        if "key_themes" in insights and insights["key_themes"]:
+            themes = insights["key_themes"][:3]
+            summary_parts.append(f"主题: {', '.join(themes)}")
+
+        if "unanswered_questions" in insights and insights["unanswered_questions"]:
+            questions = insights["unanswered_questions"][:2]
+            summary_parts.append(f"未回答问题: {', '.join(questions)}")
+
+        if "unexpected_findings" in insights and insights["unexpected_findings"]:
+            findings = insights["unexpected_findings"][:2]
+            summary_parts.append(f"意外发现: {', '.join(findings)}")
+
+        return "\n".join(summary_parts)
+```
+
+#### search_sub_answer_executing.py
+```python
+"""
+搜索与子回答执行工作流模块，负责执行特定搜索策略并直接生成子答案。
+
+作为内层循环，负责执行单个任务的搜索策略，包括搜索执行、
+由agent决定的深度爬取，以及子答案生成。
+"""
+
+import logging
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+
+from aisr.workflows.base import Workflow
+
+
+class SearchSubAnswerExecutingWorkflow(Workflow):
+    """
+    搜索与子回答执行工作流。
+
+    作为内层循环，负责执行指定的搜索策略，进行网络搜索，
+    由子回答代理决定是否需要深度内容爬取，并直接生成结构化子回答。
+    """
+
+    def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行搜索策略并生成子回答。
+
+        Args:
+            context: 执行上下文
+                - task: 当前子任务
+                - search_strategy: 搜索策略
+                - attempt: 当前是第几次尝试（可选）
+                - previous_attempts: 前几次搜索尝试信息（可选）
+
+        Returns:
+            包含搜索结果和子回答的结果
+        """
+        task = context.get("task")
+        search_strategy = context.get("search_strategy")
+        attempt = context.get("attempt", 1)
+
+        if not task:
+            error_msg = "缺少任务信息"
+            logging.error(error_msg)
+            return {"error": error_msg}
+
+        if not search_strategy:
+            error_msg = "缺少搜索策略"
+            logging.error(error_msg)
+            return {"error": error_msg}
+
+        task_id = task.get("id", "unknown-task")
+
+        logging.info(f"执行搜索与子回答工作流，任务 {task_id}，第 {attempt} 次尝试")
+
+        try:
+            # 记录执行开始
+            self.memory.update_state("search_start_time", datetime.now().isoformat())
+            self.memory.update_state("current_task", task)
+            self.memory.update_state("current_strategy", search_strategy)
+
+            # 1. 执行初步搜索
+            search_results = self._execute_search(task, search_strategy)
+
+            # 记录初步搜索结果
+            self.memory.save_result("initial_search_results", search_results)
+
+            # 如果搜索结果为空或出错，直接返回
+            if search_results.get("error") or search_results.get("result_count", 0) == 0:
+                return {
+                    "task_id": task_id,
+                    "error": search_results.get("error", "搜索未返回任何结果"),
+                    "search_result": search_results,
+                    "needs_further_search": True,
+                    "search_attempt": attempt
+                }
+
+            # 2. 首先让子回答代理分析初步搜索结果
+            initial_analysis = self.call_component("sub_answer_agent.analyze_results", {
+                "task": task,
+                "search_results": search_results,
+                "is_initial_analysis": True  # 标记这是初步分析
+            })
+
+            # 记录初步分析
+            self.memory.save_result("initial_analysis", initial_analysis)
+
+            # 3. 检查子回答代理是否需要深度爬取
+            needs_deep_crawling = initial_analysis.get("needs_further_analysis", False)
+            urls_for_crawling = initial_analysis.get("urls_for_deep_analysis", [])
+
+            # 4. 如果需要深度爬取，执行爬取
+            crawl_results = {}
+            if needs_deep_crawling and urls_for_crawling:
+                logging.info(f"任务 {task_id} 需要深度爬取 {len(urls_for_crawling)} 个URL")
+
+                for url in urls_for_crawling:
+                    logging.info(f"爬取URL: {url}")
+
+                    # 调用网页爬虫工具
+                    crawl_result = self.call_component("web_crawler.execute", {
+                        "url": url,
+                        "depth": search_strategy.get("crawl_depth", 1),
+                        "max_pages": search_strategy.get("max_crawl_pages", 3)
+                    })
+
+                    if not crawl_result.get("error"):
+                        crawl_results[url] = crawl_result
+
+                # 记录爬取结果
+                self.memory.save_result("crawl_results", crawl_results)
+
+            # 5. 准备最终分析的上下文
+            final_analysis_context = {
+                "task": task,
+                "search_results": search_results
+            }
+
+            # 如果有爬取结果，合并到上下文
+            if crawl_results:
+                # 合并搜索结果和爬取结果
+                combined_results = self._combine_results(search_results, crawl_results)
+                final_analysis_context["search_results"] = combined_results
+                final_analysis_context["deep_analysis_results"] = crawl_results
+                final_analysis_context["is_post_crawl_analysis"] = True
+
+            # 6. 生成最终子回答
+            # 如果没有执行深度爬取，使用初步分析结果
+            if not crawl_results and not needs_deep_crawling:
+                sub_answer = initial_analysis
+            else:
+                # 否则，使用合并结果生成新的子回答
+                sub_answer = self.call_component("sub_answer_agent.analyze_results", final_analysis_context)
+
+            # 记录子回答
+            self.memory.save_result("sub_answer", sub_answer)
+
+            # 7. 构建最终结果
+            result = {
+                "task_id": task_id,
+                "search_result": final_analysis_context.get("search_results", search_results),
+                "sub_answer": sub_answer,
+                "needs_further_search": sub_answer.get("needs_further_search", False),
+                "search_attempt": attempt,
+                "urls_crawled": list(crawl_results.keys()) if crawl_results else [],
+                "timestamp": datetime.now().isoformat()
+            }
+
+            # 记录执行完成
+            self.memory.update_state("search_end_time", datetime.now().isoformat())
+
+            return result
+
+        except Exception as e:
+            logging.error(f"搜索与子回答工作流错误: {str(e)}")
+
+            # 返回错误结果
+            return {
+                "task_id": task_id,
+                "error": f"搜索与子回答执行失败: {str(e)}",
+                "search_attempt": attempt,
+                "needs_further_search": True
+            }
+
+    def _execute_search(self, task: Dict[str, Any], strategy: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行搜索策略中定义的搜索。
+
+        Args:
+            task: 子任务
+            strategy: 搜索策略
+
+        Returns:
+            搜索结果
+        """
+        task_id = task.get("id", "unknown-task")
+        logging.info(f"为任务 {task_id} 执行搜索")
+
+        # 获取搜索查询和工具
+        queries = strategy.get("queries", [])
+        tools = strategy.get("tools", ["web_search"])
+
+        # 如果没有提供搜索查询，尝试从任务描述生成一个默认查询
+        if not queries:
+            description = task.get("description", "")
+            if description:
+                queries = [description]
+            else:
+                logging.warning(f"任务 {task_id} 没有搜索查询和任务描述")
+                return {"error": "未提供搜索查询"}
+
+        # 汇总所有结果
+        all_results = []
+        executed_queries = []
+
+        # 对每个查询执行搜索
+        for query in queries:
+            # 记录查询
+            executed_queries.append(query)
+
+            # 对每个工具执行搜索
+            for tool_name in tools:
+                try:
+                    # 获取工具参数
+                    tool_params = strategy.get(f"{tool_name}_params", {})
+
+                    # 执行搜索
+                    if tool_name == "web_search":
+                        tool_results = self.call_component("web_search.execute", {
+                            "query": query,
+                            **tool_params
+                        })
+                    elif tool_name == "web_crawler":
+                        # 对于网页爬虫，这里仅爬取已知URL
+                        # 深度爬取在单独的步骤中进行
+                        if "url" in tool_params:
+                            tool_results = self.call_component("web_crawler.execute", {
+                                "url": tool_params["url"],
+                                **{k: v for k, v in tool_params.items() if k != "url"}
+                            })
+                        else:
+                            continue
+                    else:
+                        logging.warning(f"未知的搜索工具: {tool_name}")
+                        continue
+
+                    # 添加工具和查询信息
+                    for result in tool_results.get("results", []):
+                        result["tool"] = tool_name
+                        result["query"] = query
+                        all_results.append(result)
+
+                except Exception as e:
+                    logging.error(f"执行工具 {tool_name} 搜索错误: {str(e)}")
+                    # 添加错误结果
+                    all_results.append({
+                        "tool": tool_name,
+                        "query": query,
+                        "error": str(e),
+                        "is_error": True
+                    })
+
+        # 整理结果
+        search_results = {
+            "task_id": task_id,
+            "queries": executed_queries,
+            "tools_used": tools,
+            "results": all_results,
+            "result_count": len(all_results),
+            "timestamp": datetime.now().isoformat()
+        }
+
+        return search_results
+
+    def _combine_results(self, search_results: Dict[str, Any], crawl_results: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        合并搜索结果和爬取结果。
+
+        Args:
+            search_results: 初步搜索结果
+            crawl_results: 深度爬取结果
+
+        Returns:
+            合并后的结果
+        """
+        # 创建搜索结果的副本
+        combined = {
+            **search_results,
+            "has_crawl_results": bool(crawl_results),
+            "crawled_urls": list(crawl_results.keys())
+        }
+
+        # 如果有爬取结果，更新结果列表
+        if crawl_results:
+            # 获取原始结果列表的副本
+            results = combined.get("results", [])[:]
+            updated_results = []
+
+            # 标记哪些URL已经在原始结果中
+            processed_urls = set()
+
+            # 先处理已有结果，如果URL在爬取结果中则更新它
+            for result in results:
+                url = result.get("url")
+
+                if url and url in crawl_results:
+                    # 更新现有结果
+                    crawl_data = crawl_results[url]
+                    updated_result = {
+                        **result,  # 保留原始字段
+                        "content": crawl_data.get("content", result.get("content", "")),
+                        "is_crawled": True,
+                        "crawl_timestamp": datetime.now().isoformat()
+                    }
+                    updated_results.append(updated_result)
+                    processed_urls.add(url)
+                else:
+                    # 保持原样
+                    updated_results.append(result)
+
+            # 添加未处理的爬取结果作为新条目
+            for url, crawl_data in crawl_results.items():
+                if url not in processed_urls:
+                    new_result = {
+                        "url": url,
+                        "title": crawl_data.get("title", url),
+                        "content": crawl_data.get("content", ""),
+                        "tool": "web_crawler",
+                        "is_crawled": True,
+                        "crawl_timestamp": datetime.now().isoformat()
+                    }
+                    updated_results.append(new_result)
+
+            # 更新结果列表和计数
+            combined["results"] = updated_results
+            combined["result_count"] = len(updated_results)
+
+        return combined
+```
+
+#### task_executing_search_planning.py
+```python
+"""
+任务执行与搜索规划工作流模块，负责执行子任务列表并管理搜索策略。
+
+实现中层循环，负责高效执行研究任务并生成子回答。
+包含对每个任务的搜索策略迭代，直到任务解决或达到最大尝试次数。
+"""
+
+import logging
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+
+from aisr.workflows.base import Workflow
+
+
+class TaskExecutingSearchPlanningWorkflow(Workflow):
+    """
+    任务执行与搜索规划工作流。
+
+    作为中层循环，负责执行上层任务规划生成的子任务，
+    为每个子任务规划搜索策略并迭代执行直到任务解决，
+    最终收集所有子回答。
+    """
+
+    def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行子任务列表，为每个任务规划搜索并生成子回答。
+
+        Args:
+            context: 执行上下文
+                - query: 原始查询
+                - sub_tasks: 子任务列表 (已按优先级排序)
+                - previous_answers: 之前轮次已完成的子回答（可选）
+                - max_search_attempts: 每个任务的最大搜索尝试次数（默认3）
+
+        Returns:
+            包含子回答集合的结果字典
+        """
+        query = context.get("query")
+        sub_tasks = context.get("sub_tasks", [])
+        previous_answers = context.get("previous_answers", {})
+        max_search_attempts = context.get("max_search_attempts", 3)
+
+        if not sub_tasks:
+            error_msg = "缺少子任务列表"
+            logging.error(error_msg)
+            return {"error": error_msg, "sub_answers": {}}
+
+        logging.info(f"开始任务执行工作流，待处理子任务: {len(sub_tasks)}")
+
+        # 初始化执行状态
+        self.memory.update_state("query", query)
+        self.memory.update_state("sub_tasks", sub_tasks)
+        self.memory.update_state("execution_start_time", datetime.now().isoformat())
+        self.memory.update_state("max_search_attempts", max_search_attempts)
+
+        try:
+            # 直接使用传入的子任务列表，保持原有优先级
+            self.memory.save_result("tasks_to_execute", sub_tasks)
+
+            # 存储本轮执行的子回答
+            current_answers = {}
+
+            # 按顺序处理子任务
+            for index, task in enumerate(sub_tasks):
+                task_id = task.get("id", f"task-{index+1}")
+
+                # 记录开始处理任务
+                self._record_step(f"task_started_{task_id}", {
+                    "task_id": task_id,
+                    "task_index": index,
+                    "total_tasks": len(sub_tasks),
+                    "task_description": task.get("description", ""),
+                    "timestamp": datetime.now().isoformat()
+                })
+
+                # ======= 对当前任务执行搜索循环，直到解决或达到最大尝试次数 =======
+                search_attempt = 0
+                task_resolved = False
+                task_result = None
+
+                # 累积的搜索结果和评估
+                cumulative_search_results = []
+
+                while not task_resolved and search_attempt < max_search_attempts:
+                    search_attempt += 1
+                    logging.info(f"任务 {task_id} 的搜索尝试 {search_attempt}/{max_search_attempts}")
+
+                    # 1. 为当前任务规划搜索策略（考虑之前的尝试结果）
+                    search_context = self._prepare_search_context(
+                        task,
+                        index,
+                        sub_tasks,
+                        {**previous_answers, **current_answers},
+                        cumulative_search_results,
+                        search_attempt
+                    )
+
+                    search_strategy = self.call_component("search_plan_agent.generate_search_strategy", search_context)
+
+                    # 记录搜索策略
+                    self.memory.save_result(f"search_strategy_{task_id}_attempt_{search_attempt}", search_strategy)
+
+                    # 2. 执行搜索
+                    search_result = self.call_component("search_sub_answer_executing.execute", {
+                        "task": task,
+                        "search_strategy": search_strategy,
+                        "attempt": search_attempt,
+                        "previous_attempts": cumulative_search_results
+                    })
+
+                    # 记录搜索结果
+                    self.memory.save_result(f"search_result_{task_id}_attempt_{search_attempt}", search_result)
+
+                    # 添加到累积的搜索结果
+                    cumulative_search_results.append({
+                        "attempt": search_attempt,
+                        "strategy": search_strategy,
+                        "result": search_result
+                    })
+
+                    # 3. 评估任务是否已解决
+                    task_resolved, task_result = self._evaluate_task_completion(
+                        task,
+                        search_result,
+                        cumulative_search_results
+                    )
+
+                    # 记录当前尝试的结果
+                    self._record_step(f"task_{task_id}_attempt_{search_attempt}", {
+                        "search_attempt": search_attempt,
+                        "resolved": task_resolved,
+                        "timestamp": datetime.now().isoformat()
+                    })
+
+                    # 如果解决了，或者已有子回答且当前是最后一次尝试，保存结果
+                    if task_resolved or (search_attempt == max_search_attempts and "sub_answer" in search_result):
+                        if not task_result and "sub_answer" in search_result:
+                            task_result = search_result
+
+                # 如果有任务结果并且包含子回答，保存到当前回答
+                if task_result and "sub_answer" in task_result:
+                    current_answers[task_id] = task_result["sub_answer"]
+
+                # 记录任务完成，无论解决与否
+                final_status = "resolved" if task_resolved else "max_attempts_reached"
+                self._record_step(f"task_completed_{task_id}", {
+                    "task_id": task_id,
+                    "task_index": index,
+                    "status": final_status,
+                    "attempts": search_attempt,
+                    "success": task_id in current_answers,
+                    "timestamp": datetime.now().isoformat()
+                })
+
+            # 记录执行完成
+            self.memory.update_state("execution_end_time", datetime.now().isoformat())
+            self.memory.update_state("tasks_completed", len(current_answers))
+
+            # 返回本轮执行结果
+            return {
+                "sub_answers": current_answers,
+                "tasks_total": len(sub_tasks),
+                "tasks_completed": len(current_answers),
+                "execution_time": self._calculate_execution_time()
+            }
+
+        except Exception as e:
+            logging.error(f"任务执行工作流错误: {str(e)}")
+
+            # 返回已完成的子回答和错误信息
+            return {
+                "error": f"任务执行失败: {str(e)}",
+                "sub_answers": current_answers if 'current_answers' in locals() else {},
+                "tasks_total": len(sub_tasks),
+                "tasks_completed": len(current_answers) if 'current_answers' in locals() else 0
+            }
+
+    def _prepare_search_context(self,
+                              task: Dict[str, Any],
+                              task_index: int,
+                              all_tasks: List[Dict[str, Any]],
+                              existing_answers: Dict[str, Any],
+                              previous_attempts: List[Dict[str, Any]] = None,
+                              current_attempt: int = 1) -> Dict[str, Any]:
+        """
+        准备搜索上下文信息，包含前一次搜索结果和尝试信息。
+
+        Args:
+            task: 当前子任务
+            task_index: 任务在队列中的索引
+            all_tasks: 所有待执行任务
+            existing_answers: 已有的子回答
+            previous_attempts: 当前任务的前几次搜索尝试结果
+            current_attempt: 当前是第几次尝试
+
+        Returns:
+            搜索上下文
+        """
+        task_id = task.get("id", f"task-{task_index+1}")
+        logging.info(f"为任务 {task_id} 准备第 {current_attempt} 次搜索上下文")
+
+        # 构建上下文信息
+        search_context = {
+            "task": task,
+            "task_index": task_index,
+            "total_tasks": len(all_tasks),
+            "current_attempt": current_attempt
+        }
+
+        # 添加前几次搜索尝试信息
+        if previous_attempts:
+            search_context["previous_attempts"] = previous_attempts
+
+            # 分析前几次尝试的问题
+            if len(previous_attempts) > 0:
+                search_context["previous_queries"] = [
+                    attempt.get("strategy", {}).get("queries", [])
+                    for attempt in previous_attempts
+                ]
+                search_context["previous_tools"] = [
+                    attempt.get("strategy", {}).get("tools", [])
+                    for attempt in previous_attempts
+                ]
+
+                # 获取最近一次尝试的搜索结果数量
+                last_attempt = previous_attempts[-1]
+                result_count = last_attempt.get("result", {}).get("result_count", 0)
+                search_context["last_attempt_result_count"] = result_count
+
+        # 添加前一个任务的信息（如果有）
+        if task_index > 0:
+            prev_task = all_tasks[task_index - 1]
+            prev_task_id = prev_task.get("id")
+
+            if prev_task_id in existing_answers:
+                search_context["previous_task"] = prev_task
+                search_context["previous_answer"] = existing_answers[prev_task_id]
+
+        # 添加已有回答的主题和发现
+        if existing_answers:
+            search_context["existing_answers_count"] = len(existing_answers)
+
+            # 提取关键主题作为上下文
+            key_themes = self._extract_key_themes(existing_answers)
+            if key_themes:
+                search_context["key_themes"] = key_themes
+
+        return search_context
+
+    def _evaluate_task_completion(self,
+                                task: Dict[str, Any],
+                                current_result: Dict[str, Any],
+                                all_attempts: List[Dict[str, Any]]) -> tuple:
+        """
+        评估任务是否已经成功解决。
+
+        Args:
+            task: 当前子任务
+            current_result: 当前搜索尝试的结果
+            all_attempts: 所有搜索尝试的结果
+
+        Returns:
+            (is_resolved, result_to_use) 元组:
+            - is_resolved: 布尔值，表示任务是否已解决
+            - result_to_use: 要使用的结果，如果已解决
+        """
+        # 如果当前结果包含error，任务未解决
+        if current_result.get("error"):
+            return False, None
+
+        # 如果current_result中有解决状态，使用它
+        if "task_resolved" in current_result:
+            return current_result["task_resolved"], current_result
+
+        # 检查是否有子回答
+        if "sub_answer" not in current_result:
+            return False, None
+
+        sub_answer = current_result.get("sub_answer", {})
+
+        # 检查子回答的质量和完整性
+        confidence = sub_answer.get("confidence", 0)
+        completeness = sub_answer.get("completeness", 0)
+
+        # 如果子回答明确标记为需要进一步搜索
+        if sub_answer.get("needs_further_search", False):
+            return False, None
+
+        # 如果置信度和完整性足够高
+        if confidence >= 0.8 and completeness >= 0.8:
+            return True, current_result
+
+        # 如果已经有至少2次尝试，且当前结果比前一次好
+        if len(all_attempts) >= 2:
+            previous_confidence = all_attempts[-2].get("result", {}).get("sub_answer", {}).get("confidence", 0)
+            previous_completeness = all_attempts[-2].get("result", {}).get("sub_answer", {}).get("completeness", 0)
+
+            # 如果当前结果显著优于前一次，且达到了可接受的水平
+            if (confidence >= 0.6 and completeness >= 0.6 and
+                confidence > previous_confidence and completeness > previous_completeness):
+                return True, current_result
+
+        # 默认情况下，认为任务未完全解决，需要继续尝试
+        return False, None
+
+    def _extract_key_themes(self, answers: Dict[str, Any]) -> List[str]:
+        """
+        从已有子回答中提取关键主题，用于后续任务的上下文。
+
+        Args:
+            answers: 已有子回答
+
+        Returns:
+            关键主题列表
+        """
+        themes = []
+
+        for task_id, answer in answers.items():
+            if isinstance(answer, dict):
+                # 从key_points中提取主题
+                key_points = answer.get("key_points", [])
+                if key_points and isinstance(key_points, list):
+                    themes.extend(key_points[:2])  # 只取前两个关键点
+
+        # 去重并限制数量
+        unique_themes = list(set(themes))
+        return unique_themes[:5]  # 最多返回5个主题
+
+    def _calculate_execution_time(self) -> str:
+        """计算执行耗时。"""
+        start_time = self.memory.get_state("execution_start_time")
+        end_time = self.memory.get_state("execution_end_time")
+
+        if not start_time or not end_time:
+            return "unknown"
+
+        try:
+            start = datetime.fromisoformat(start_time)
+            end = datetime.fromisoformat(end_time)
+            duration = end - start
+            return str(duration)
+        except Exception:
+            return "error calculating"
+
+    def _record_step(self, step_name: str, data: Dict[str, Any]) -> None:
+        """记录执行步骤。"""
+        # 保存到工作流内存
+        self.memory.save_result(step_name, data)
+
+        # 记录到全局状态日志
+        self.memory.update_state("latest_step", {
+            "name": step_name,
+            "data": data,
+            "timestamp": datetime.now().isoformat()
+        })
+```
+

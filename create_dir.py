@@ -57,7 +57,6 @@ FILES = [
     "workflows/__init__.py",
     "workflows/base.py",
     "workflows/task_planning.py",
-    "workflows/search_planning.py",
     "workflows/sub_answer.py",
     "workflows/research.py",
 
