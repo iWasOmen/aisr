@@ -37,3 +37,71 @@ prioritized_tasks = self._prioritize_tasks(sub_tasks)这种调整优先级的不
 然后就是task executingSearchPlanning 循环：sub_tasks->search planning for task1->search executing循环->循环直到task1解决->search planning for task2->search->search executing循环->..
 现在应该没有“循环直到task1解决”这个循环，现在只是对每一个sub_task循环
 请你与我讨论，我的设计是否更优？如果你认可，你可以直接优化TaskExecutingSearchPlanningWorkflow
+
+
+我认为我们一上来做的太复杂了，做这样一个系统应该从简单的做起，然后逐渐添加功能，我的最简设计如下：
+Task Plan Agent：
+-输入：用户query+可选的Task Plan历史（包括历史task plan以及之前的每个task plan的所有sub answer+上一次未执行的plan+对该plan的insight）
+-输出：一个list形式的sub_tasks+跳出
+Search Plan Agent：
+-输入：当前task+可选的Search Plan历史（包括历史的search plan以及之前的每个plan的sub answer+对本次plan的sub_answer）
+-输出：对于当前sub_task的搜索query列表+当前sub_task是否已经完成
+Sub Answer Agent：
+-输入：当前的sub_task+doc（先调用api然后爬去网页，强制使用top5）
+-输出：对于当前sub_task的的sub_answer
+Insight Agent
+-输入：用户query+当前未执行的task plan+可选的Task Plan历史（包括历史task plan以及之前的每个task plan的所有sub answer）
+-输出：对于当前task plan的的insight
+AnswerPlan Agent
+-输入：用户query+所有task以及其对应的sub_answers
+-输出：对于当前用户query，回答的大纲
+Answer Agent
+-输入：用户query+所有task以及其对应的sub_answers+回答的大纲
+-输出：回答
+
+LLM provider：
+输入message，直接输出结果或者输出工具调用，对于json输出的agent，均使用工具调用的形式
+
+Tools:
+包含web_api和web_crawler两个原子功能以及一个web_search复合功能：
+def web_crawler(raw_url):
+    """输入query，返回网页爬去后的str结果:"""
+    url = f"https://r.jina.ai/{raw_url}"
+    headers = {
+        "Authorization": "Bearer jina_aa5310a5f80f4e30b47623fd842310d8464pWJRxSDMi6gBcwvviHpMnfwc9"
+    }
+
+    response = requests.get(url, headers=headers)
+
+    #返回网页内容
+    print(response.text)
+def web_api(query):
+    """返回一个列表，形如如下：
+    [{'snippet': 'Learn about the nutrients, antioxidants, and potential health effects of<b> apples.</b> Find out how<b> apples</b> may help with weight loss, diabetes, heart disease, and cancer.',
+  'title': 'Apples 101: Nutrition Facts and Health Benefits',
+  'link': 'https://www.healthline.com/nutrition/foods/apples'},
+ {'snippet': 'Learn how<b> apples</b> can improve your health with their fiber, antioxidants, and phytochemicals. Find out the best types of<b> apples</b> for different purposes, how to buy and store them, and what side effects to watch out for.',
+  'title': 'Apples: Nutrition and Health Benefits - WebMD',
+  'link': 'https://www.webmd.com/food-recipes/benefits-apples'},
+ {'snippet': '<b>Apples</b> are nutritious, filling, and versatile fruits that may lower your risk of various diseases. Learn how<b> apples</b> can support your weight loss, heart health, gut health, and brain health with scientific evidence.',
+  'title': '10 Impressive Health Benefits of Apples',"""
+    import os
+
+    os.environ["BING_SUBSCRIPTION_KEY"] = ""
+    os.environ["BING_SEARCH_URL"] = "https://api.bing.microsoft.com/v7.0/search"
+
+    from langchain_community.utilities import BingSearchAPIWrapper
+    search = BingSearchAPIWrapper()
+    res = search.results(query, 5)
+    print(type(res))
+    print(res)
+还有一个串起来web_api和web_crawler的web_search函数，达到输入一个query，返回top5网页的精读结果
+
+main_workflow函数：
+没有记忆设计，没有router设计，所有能简化的都简化掉，一切都在main的两个循环里：
+外层循环：query->Task Plan Agent->sub_tasks->Search Plan Agent->Sub Answer Agent->sub_answers->Task Plan Agent->Insight Agent->Task Plan Agent->循环直到最大次数或者任务已解决->AnswerPlan Agent->Answer Agent
+内存循环：sub_tasks->each sub_task->Search Plan Agent->Sub Answer Agent->sub answer for this task->循环直到该task解决，然后进入到下一个task->直到所有task解决->sub_answers
+整个main接受一个query，最终输出回答结果
+
+你认为这个设计怎么样？请你先不要实现，先讲讲你的理解
+

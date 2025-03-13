@@ -1,0 +1,23 @@
+# config.yaml
+api_keys:
+  anthropic: "YOUR_ANTHROPIC_API_KEY"  # 如果未设置，将尝试从环境变量ANTHROPIC_API_KEY获取
+  openai: "YOUR_OPENAI_API_KEY"        # 如果未设置，将尝试从环境变量OPENAI_API_KEY获取
+  bing_search: ""                      # 如果未设置，将尝试从环境变量BING_SUBSCRIPTION_KEY获取
+
+models:
+  anthropic:
+    default: "claude-3-7-sonnet-20250219"
+    fast: "claude-3-5-haiku-20240307"
+    powerful: "claude-3-opus-20240229"
+  openai:
+    default: "gpt-4o"
+    fast: "gpt-3.5-turbo"
+    powerful: "gpt-4o"
+
+parameters:
+  max_tokens: 4000
+  temperature: 0.7
+  search_max_results: 5
+  max_iterations: 3
+
+# 其他配置项...
