@@ -18,13 +18,13 @@ colorama.init(autoreset=True)
 
 # 可用的颜色映射
 COLORS = {
-    "red": "red",
-    "green": "green",
+    "red": "red", #llm相关
+    "green": "green",#agent相关
     "yellow": "yellow",
-    "blue": "blue",
+    "blue": "blue",#search相关
     "magenta": "magenta",
     "cyan": "cyan",
-    "white": "white"
+    "white": "white"#默认+主workflow
 }
 
 # 全局模块颜色配置字典

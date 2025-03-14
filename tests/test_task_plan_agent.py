@@ -1,22 +1,24 @@
 """
 任务规划代理模块的测试。
 """
-
+import os
 import unittest
 import json
 from aisr.core.llm_provider import LLMProvider
 from aisr.agents.task_plan import TaskPlanAgent
-from tests import API_KEY, TEST_QUERY
+from tests import TEST_QUERY
+from aisr.utils.config import config
 
-from aisr.utils.logging import get_logger
-logger = get_logger(__name__, color="green")
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
 
 class TestTaskPlanAgent(unittest.TestCase):
     """TaskPlanAgent类的测试用例"""
 
     def setUp(self):
         """测试前设置anthropic"""
-        llm = LLMProvider(provider="openai", api_key=API_KEY)
+        llm = LLMProvider()
         self.agent = TaskPlanAgent(llm, memory=None)
 
     def test_task_planning(self):

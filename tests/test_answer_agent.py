@@ -5,15 +5,16 @@
 import unittest
 from aisr.core.llm_provider import LLMProvider
 from aisr.agents.answer import AnswerAgent
-from tests import API_KEY, TEST_QUERY
-
+from tests import TEST_QUERY
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 class TestAnswerAgent(unittest.TestCase):
     """AnswerAgent类的测试用例"""
 
     def setUp(self):
         """测试前设置anthropic"""
-        llm = LLMProvider(provider="openai", api_key=API_KEY)
+        llm = LLMProvider()
         self.agent = AnswerAgent(llm, memory=None)
 
     def test_answer_generation(self):

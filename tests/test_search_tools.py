@@ -5,7 +5,8 @@
 import unittest
 import time
 from aisr.tools.search_tools import web_api, web_crawler, web_search
-
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 class TestSearchTools(unittest.TestCase):
     """搜索工具函数的测试用例"""
@@ -39,7 +40,7 @@ class TestSearchTools(unittest.TestCase):
     def test_web_crawler(self):
         """测试Web爬虫功能"""
         # 使用一个稳定的URL进行测试
-        url = "https://en.wikipedia.org/wiki/Deep_learning"
+        url = "https://www.baidu.com/"
 
         print("\n=== 测试Web爬虫 ===")
         print(f"URL: {url}")
@@ -71,6 +72,7 @@ class TestSearchTools(unittest.TestCase):
 
         start_time = time.time()
         result = web_search(query, max_results=2)  # 限制为2个结果以加快测试
+        print("raw result:",result)
         duration = time.time() - start_time
 
         print(f"搜索耗时: {duration:.2f}秒")

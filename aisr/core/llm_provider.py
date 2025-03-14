@@ -3,8 +3,9 @@ LLM提供者模块，负责与LLM服务提供商集成。
 """
 
 import json
-import logging
+import os
 from typing import Dict, Any, List, Optional, Union
+from aisr.utils.config import config
 
 # 可选导入，根据用户配置决定
 try:
@@ -29,7 +30,7 @@ class LLMProvider:
     支持Anthropic Claude和OpenAI模型。
     """
 
-    def __init__(self, provider: str = "openai", api_key: Optional[str] = None, model: Optional[str] = None):
+    def __init__(self, provider: Optional[str] = None, api_key: Optional[str] = None, model: Optional[str] = None):
         """
         初始化LLM提供者。
 
@@ -38,17 +39,11 @@ class LLMProvider:
             api_key: API密钥
             model: 模型名称
         """
-        self.provider = provider.lower()
-        self.api_key = api_key
-
-        # 设置默认模型
-        default_models = {
-            "anthropic": "claude-3-7-sonnet-20250219",
-            "openai": "gpt-4o-2024-08-06"
-        }
+        self.provider = provider.lower() if provider else config.get("runtime_parameters").get("model_provider","openai")
+        self.api_key = api_key if api_key else config.get("api_keys").get(self.provider,os.environ.get("OPENAI_API_KEY"))
 
         # 根据输入或默认值设置模型
-        self.model = model if model else default_models.get(self.provider, "claude-3-7-sonnet-20250219")
+        self.model = model if model else config.get("default_models").get(self.provider,"gpt-4o-2024-08-06")
 
         # 初始化客户端
         self._initialize_client()
@@ -60,7 +55,6 @@ class LLMProvider:
                 raise ImportError("anthropic 库未安装。请使用 pip install anthropic 安装。")
             if not self.api_key:
                 raise ValueError("使用Anthropic需要提供API密钥")
-
             self.client = anthropic.Anthropic(api_key=self.api_key)
 
         elif self.provider == "openai":
@@ -69,12 +63,13 @@ class LLMProvider:
             if not self.api_key:
                 raise ValueError("使用OpenAI需要提供API密钥")
 
-            self.client = openai.OpenAI(api_key=self.api_key,base_url="http://rerverseapi.workergpt.cn/v1")
+            base_url=config.get("api_keys").get("openai_base_url","https://api.openai.com/v1")
+            self.client = openai.OpenAI(api_key=self.api_key,base_url=base_url)
 
         else:
             raise ValueError(f"不支持的提供者: {self.provider}。支持的提供者: anthropic, openai")
 
-    def generate(self, prompt: Union[str, List[Dict[str, Any]]], temperature: float = 0.7, max_tokens: int = 8000) -> str:
+    def generate(self, prompt: Union[str, List[Dict[str, Any]]], temperature: float = 0.7, max_tokens: int = config.get("runtime_parameters").get("max_tokens",8192)) -> str:
         """
         生成LLM响应。
 
@@ -117,7 +112,7 @@ class LLMProvider:
             raise ValueError(f"无法生成: 不支持的提供者 {self.provider}")
 
     def generate_with_function_calling(self, prompt: Union[str, List[Dict[str, Any]]], functions: List[Dict[str, Any]],
-                                       temperature: float = 0.2, max_tokens: int = 8000) -> Dict[str, Any]:
+                                       temperature: float = 0.2, max_tokens: int = config.get("runtime_parameters").get("max_tokens",8192)) -> Dict[str, Any]:
         """
         使用函数调用功能生成结构化输出。
 

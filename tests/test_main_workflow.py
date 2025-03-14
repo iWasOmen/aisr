@@ -4,9 +4,9 @@
 
 import unittest
 import time
-from aisr.main_workflow import main_workflow
-from tests import API_KEY
-
+from aisr.workflows.simple_workflow import main_workflow
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 class TestMainWorkflow(unittest.TestCase):
     """main_workflow函数的测试用例"""
@@ -25,7 +25,6 @@ class TestMainWorkflow(unittest.TestCase):
         # 设置max_iterations=1以加快测试
         result = main_workflow(
             query=query,
-            api_key=API_KEY,
             max_iterations=1,
             provider="anthropic"
         )
@@ -62,7 +61,6 @@ class TestMainWorkflow(unittest.TestCase):
 
         result = main_workflow(
             query=query,
-            api_key=API_KEY,
             max_iterations=2,  # 限制为2次迭代以节省时间
             provider="anthropic"
         )

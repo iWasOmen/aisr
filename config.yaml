@@ -1,23 +1,22 @@
 # config.yaml
 api_keys:
-  anthropic: "YOUR_ANTHROPIC_API_KEY"  # 如果未设置，将尝试从环境变量ANTHROPIC_API_KEY获取
-  openai: "YOUR_OPENAI_API_KEY"        # 如果未设置，将尝试从环境变量OPENAI_API_KEY获取
-  bing_search: ""                      # 如果未设置，将尝试从环境变量BING_SUBSCRIPTION_KEY获取
+  #优先级：传参>yaml>环境变量
+  anthropic: "YOUR_ANTHROPIC_API_KEY"
+  openai: "sk-"
+  openai_base_url: "http://rerverseapi.workergpt.cn/v1"
+  bing_search: ""
+  bing_search_url: "https://api.bing.microsoft.com/v7.0/search"
+  jina: "jina_"
 
-models:
-  anthropic:
-    default: "claude-3-7-sonnet-20250219"
-    fast: "claude-3-5-haiku-20240307"
-    powerful: "claude-3-opus-20240229"
-  openai:
-    default: "gpt-4o"
-    fast: "gpt-3.5-turbo"
-    powerful: "gpt-4o"
+default_models:
+  anthropic: "claude-3-7-sonnet-20250219"
+  openai: "gpt-4o-2024-08-06"
 
-parameters:
-  max_tokens: 4000
+runtime_parameters:
+  model_provider: "openai"
+  enable_crawler: false
+  max_tokens: 8192
+    #以下参数目前没有用上，实际上是写死的
   temperature: 0.7
   search_max_results: 5
   max_iterations: 3
-
-# 其他配置项...

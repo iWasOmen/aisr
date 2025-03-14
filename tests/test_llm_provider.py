@@ -5,8 +5,8 @@ LLM提供者模块的测试。
 import unittest
 import json
 from aisr.core.llm_provider import LLMProvider
-from tests import API_KEY
-
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 class TestLLMProvider(unittest.TestCase):
     """LLMProvider类的测试用例"""
@@ -14,7 +14,7 @@ class TestLLMProvider(unittest.TestCase):
     def setUp(self):
         """测试前设置"""
         #anthropic
-        self.llm = LLMProvider(provider="openai", api_key=API_KEY)
+        self.llm = LLMProvider()
 
     def test_generate(self):
         """测试文本生成功能"""

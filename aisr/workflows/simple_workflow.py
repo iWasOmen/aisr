@@ -20,9 +20,10 @@ from aisr.agents.answer_plan import AnswerPlanAgent
 from aisr.agents.answer import AnswerAgent
 from aisr.tools.search_tools import web_search
 from aisr.core.llm_provider import LLMProvider
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
-def main_workflow(query: str, api_key: str, max_iterations: int = 3, provider: str = "openai") -> Dict[str, Any]:
+def main_workflow(query: str, max_iterations: int = 3) -> Dict[str, Any]:
     """
     执行完整的AISR研究工作流。
 
@@ -40,7 +41,7 @@ def main_workflow(query: str, api_key: str, max_iterations: int = 3, provider: s
     logging.info(f"开始AISR工作流，查询: '{query}'")
 
     # 初始化LLM提供者
-    llm = LLMProvider(provider=provider, api_key=api_key)
+    llm = LLMProvider()
 
     # 初始化所有代理
     task_plan_agent = TaskPlanAgent(llm, memory=None)
@@ -199,5 +200,5 @@ def main_workflow(query: str, api_key: str, max_iterations: int = 3, provider: s
         "completed_tasks": len(all_sub_answers)
     }
 
-result = main_workflow("请研究deep research", "sk")
+result = main_workflow("请研究deep research")
 print(result["answer"])

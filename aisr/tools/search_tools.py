@@ -10,9 +10,11 @@ import logging
 from typing import Dict, Any, List
 import time
 from urllib.parse import urlparse
+from aisr.utils.config import config
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+
+from aisr.utils import logging_utils
+logger = logging_utils.get_logger(__name__, color="blue")
 
 class SearchTools:
     """
@@ -31,10 +33,11 @@ class SearchTools:
         Returns:
             搜索结果列表，每个结果包含标题、摘要和链接
         """
+        logger.info(f"正在搜索: {query}")
         try:
             # 设置Bing搜索API环境变量
-            os.environ["BING_SUBSCRIPTION_KEY"] = "xx"  # 这里应该填入有效的API密钥
-            os.environ["BING_SEARCH_URL"] = "https://api.bing.microsoft.com/v7.0/search"
+            os.environ["BING_SUBSCRIPTION_KEY"] = config.get("api_keys").get("bing_search",os.environ.get("BING_SUBSCRIPTION_KEY"))
+            os.environ["BING_SEARCH_URL"] = config.get("api_keys").get("bing_search_url","https://api.bing.microsoft.com/v7.0/search")
 
             # 导入Bing搜索包装器
             from langchain_community.utilities import BingSearchAPIWrapper
@@ -54,6 +57,7 @@ class SearchTools:
                 }
                 formatted_results.append(formatted_result)
 
+            logger.info(f"搜索结果: {formatted_results}")
             return formatted_results
 
         except Exception as e:
@@ -75,8 +79,9 @@ class SearchTools:
         try:
             # 使用Jina AI的网页渲染服务
             jina_url = f"https://r.jina.ai/{url}"
+            jian_api = config.get("api_keys").get("jina")
             headers = {
-                "Authorization": "Bearer jina_xx"
+                "Authorization": f"Bearer {jian_api}"
             }
 
             # 发送请求
@@ -93,7 +98,7 @@ class SearchTools:
 
             # 简单提取标题（实际实现可能需要更复杂的HTML解析）
             content = response.text
-            temp_dic = {"res":content[:200]}
+            temp_dic = {"res":content[:200]+"..."}
             logger.info(f"爬取结果: {json.dumps(temp_dic,ensure_ascii=False)}")
             title = ""
 
@@ -140,26 +145,26 @@ class SearchTools:
             # 2. 爬取每个搜索结果的内容
             results = []
             for idx,result in enumerate(search_results):
-                break
                 logger.info(f"结果{idx+1}:{result}")
                 # 获取URL
                 url = result.get("link", "")
-                if not url:
-                    continue
 
                 # 爬取内容
                 try:
-                    # 提取有效URL
-                    parsed_url = urlparse(url)
-                    if not parsed_url.scheme or not parsed_url.netloc:
-                        logger.warning(f"无效URL: {url}")
-                        continue
+                    if url and config.get("runtime_parameters").get("enable_crawler",True):
+                        # 提取有效URL
+                        parsed_url = urlparse(url)
+                        if not parsed_url.scheme or not parsed_url.netloc:
+                            logger.warning(f"无效URL: {url}")
+                            continue
 
-                    # 添加延迟以避免请求过快
-                    time.sleep(2)
+                        # 添加延迟以避免请求过快
+                        time.sleep(2)
 
-                    # 执行爬取
-                    crawl_result = SearchTools.web_crawler(url)
+                        # 执行爬取
+                        crawl_result = SearchTools.web_crawler(url)
+                    else:
+                        crawl_result = {}
 
                     # 合并搜索结果和爬取内容
                     combined_result = {

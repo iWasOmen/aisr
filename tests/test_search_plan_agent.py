@@ -5,15 +5,16 @@
 import unittest
 from aisr.core.llm_provider import LLMProvider
 from aisr.agents.search_plan import SearchPlanAgent
-from tests import API_KEY, TEST_TASK
-
+from tests import TEST_TASK
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 class TestSearchPlanAgent(unittest.TestCase):
     """SearchPlanAgent类的测试用例"""
 
     def setUp(self):
         """测试前设置anthropic"""
-        llm = LLMProvider(provider="openai", api_key=API_KEY)
+        llm = LLMProvider()
         self.agent = SearchPlanAgent(llm, memory=None)
 
     def test_search_planning(self):
