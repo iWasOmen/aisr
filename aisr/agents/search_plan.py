@@ -6,6 +6,7 @@
 """
 
 import logging
+from datetime import datetime
 from typing import Dict, Any, List
 import json
 
@@ -130,7 +131,8 @@ class SearchPlanAgent(Agent):
         Returns:
             系统提示字符串
         """
-        return """你是一位资深搜索专家，擅长将研究任务转化为有效的搜索查询。
+        formatted_date = datetime.now().strftime("%Y-%m-%d")
+        return f"""now date:{formatted_date}\n你是一位资深搜索专家，擅长将研究任务转化为有效的搜索查询。
 
 你的职责是：
 1. 分析给定的研究子任务

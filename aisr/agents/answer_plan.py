@@ -3,7 +3,7 @@
 
 作为研究结果综合阶段的组件，负责设计最终答案的结构框架。
 """
-
+from datetime import datetime
 import logging
 from typing import Dict, Any, List
 import json
@@ -100,7 +100,6 @@ class AnswerPlanAgent(Agent):
         # 构建用户提示
         query = context.get("query", "")
         sub_answers = context.get("sub_answers", {})
-
         user_prompt = f"我需要基于以下信息，为研究问题的最终答案设计结构大纲:\n\n"
         user_prompt += f"## 原始查询\n{query}\n\n"
 
@@ -124,7 +123,8 @@ class AnswerPlanAgent(Agent):
         Returns:
             系统提示字符串
         """
-        return """你是一位资深研究报告编辑，擅长设计清晰、有条理的报告结构。
+        formatted_date = datetime.now().strftime("%Y-%m-%d")
+        return f"""now date:{formatted_date}\n你是一位资深研究报告编辑，擅长设计清晰、有条理的报告结构。
 
 你的职责是：
 1. 分析研究问题和所有已收集的信息

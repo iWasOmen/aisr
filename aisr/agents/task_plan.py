@@ -6,6 +6,7 @@
 """
 
 import logging
+from datetime import datetime
 from typing import Dict, Any, List
 import json
 import re
@@ -176,7 +177,8 @@ class TaskPlanAgent(Agent):
         Returns:
             系统提示字符串
         """
-        return """你是一位资深研究规划专家，擅长将复杂查询分解为结构化的研究子任务。
+        formatted_date = datetime.now().strftime("%Y-%m-%d")
+        return f"""now date:{formatted_date}\n你是一位资深研究规划专家，擅长将复杂查询分解为结构化的研究子任务。
 
 你的职责是：
 1. 分析用户的研究查询
@@ -194,8 +196,9 @@ class TaskPlanAgent(Agent):
 
 请注意：
 - 子任务数量应根据查询复杂度自行判断，一般为2-4个
-- 每个子任务必须包含标题和详细描述
+- 每个子任务必须包含标题和详细描述，标题应当准确概括该任务的目标，包含所有必要实体
 - 提供详细的推理过程，解释你的任务分解逻辑
+- 子任务应当是针对研究阶段的，如果是根据已有研究结果进行总结、计算等阶段，不属于研究子任务
 
 你的输出将直接用于指导自动化研究系统执行查询，因此请保持清晰和结构化。"""
 

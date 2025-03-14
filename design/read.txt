@@ -44,7 +44,7 @@ Task Plan Agent：
 -输入：用户query+可选的Task Plan历史（包括历史task plan以及之前的每个task plan的所有sub answer+上一次未执行的plan+对该plan的insight）
 -输出：一个list形式的sub_tasks+跳出
 Search Plan Agent：
--输入：当前task+可选的Search Plan历史（包括历史的search plan以及之前的每个plan的sub answer+对本次plan的sub_answer）
+-输入：当前task+可选的Search Plan历史（包括当前大的task迭代中历史的task plan以及之前的每个task的sub answer+对本次task plan的上一个可能的sub_answer，第二个是为了解决一个task需要多次搜索的情况）
 -输出：对于当前sub_task的搜索query列表+当前sub_task是否已经完成
 Sub Answer Agent：
 -输入：当前的sub_task+doc（先调用api然后爬去网页，强制使用top5）

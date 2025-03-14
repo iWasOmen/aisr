@@ -11,7 +11,7 @@ import datetime
 import re
 
 
-def generate_project_summary(root_dir='.', output_file='aisr_project_summary2.txt'):
+def generate_project_summary(root_dir='.', output_file='aisr_project_summary3.txt'):
     """
     Generate a summary of all Python files in the project.
 

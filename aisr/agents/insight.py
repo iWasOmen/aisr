@@ -5,6 +5,7 @@
 """
 
 import logging
+from datetime import datetime
 from typing import Dict, Any, List
 import json
 
@@ -134,7 +135,8 @@ class InsightAgent(Agent):
         Returns:
             系统提示字符串
         """
-        return """你是一位资深研究顾问，擅长分析研究进展并提供战略性洞察。
+        formatted_date = datetime.now().strftime("%Y-%m-%d")
+        return f"""now date:{formatted_date}\n你是一位资深研究顾问，擅长分析研究进展并提供战略性洞察。
 
 你的职责是：
 1. 分析已完成任务的答案和剩余的研究计划

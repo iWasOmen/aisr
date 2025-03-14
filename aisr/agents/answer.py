@@ -5,6 +5,7 @@
 """
 
 import logging
+from datetime import datetime
 from typing import Dict, Any, List
 import json
 
@@ -135,7 +136,8 @@ class AnswerAgent(Agent):
         Returns:
             系统提示字符串
         """
-        return """你是一位资深研究撰写专家，擅长整合多源信息，生成全面、连贯的研究报告。
+        formatted_date = datetime.now().strftime("%Y-%m-%d")
+        return f"""now date:{formatted_date}\n你是一位资深研究撰写专家，擅长整合多源信息，生成全面、连贯的研究报告。
 
 你的职责是：
 1. 分析原始研究问题
