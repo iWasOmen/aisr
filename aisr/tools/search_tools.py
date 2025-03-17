@@ -85,7 +85,7 @@ class SearchTools:
             }
 
             # 发送请求
-            response = requests.get(jina_url, headers=headers, timeout=30)
+            response = requests.get(jina_url, headers=headers, timeout=60)
 
             # 检查响应状态
             if response.status_code != 200:

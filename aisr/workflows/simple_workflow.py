@@ -23,15 +23,13 @@ from aisr.core.llm_provider import LLMProvider
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
-def main_workflow(query: str, max_iterations: int = 3) -> Dict[str, Any]:
+def main_workflow(query: str, max_iterations: int = 2) -> Dict[str, Any]:
     """
     执行完整的AISR研究工作流。
 
     Args:
         query: 用户研究查询
-        api_key: LLM API密钥
         max_iterations: 最大规划迭代次数，默认3次
-        provider: LLM提供者，默认"anthropic"
 
     Returns:
         包含最终答案的字典
@@ -53,6 +51,10 @@ def main_workflow(query: str, max_iterations: int = 3) -> Dict[str, Any]:
 
     # 跟踪所有子答案
     all_sub_answers = {}
+
+    # 添加任务记忆系统
+    task_memory = {}  # 存储每个任务的记忆
+    iteration_tasks = {}  # 存储每次迭代的任务
 
     # 外层循环：任务规划 -> 执行 -> 洞察 -> 再规划
     for iteration in range(max_iterations):
@@ -85,6 +87,10 @@ def main_workflow(query: str, max_iterations: int = 3) -> Dict[str, Any]:
 
         logging.info(f"计划生成了 {len(sub_tasks)} 个子任务")
 
+        # 更新当前迭代的任务记录
+        current_iteration_tasks = [task.get("id") for task in sub_tasks]
+        iteration_tasks[iteration] = current_iteration_tasks
+
         # 2. 内层循环：执行所有子任务
         iteration_sub_answers = {}
 
@@ -100,11 +106,35 @@ def main_workflow(query: str, max_iterations: int = 3) -> Dict[str, Any]:
                 iteration_sub_answers[task_id] = all_sub_answers[task_id]
                 continue
 
+            # 初始化或获取任务记忆
+            if task_id not in task_memory:
+                task_memory[task_id] = {
+                    "search_plans": [],
+                    "search_results": [],
+                    "sub_answers": [],
+                    "iterations": 0
+                }
+
+            # 收集相关任务的答案（当前迭代中已完成的任务）
+            related_answers = {}
+            for completed_task_id in iteration_sub_answers:
+                related_answers[completed_task_id] = iteration_sub_answers[completed_task_id]
+
             # 2.1 搜索规划
             search_plan_context = {
-                "task": task
+                "task": task,
+                "previous_search_plans": task_memory[task_id]["search_plans"],
+                "related_tasks_answers": related_answers
             }
+
+            # 如果该任务之前有子答案，添加到上下文
+            if task_memory[task_id]["sub_answers"]:
+                search_plan_context["previous_sub_answer"] = task_memory[task_id]["sub_answers"][-1]
+
             search_plan = search_plan_agent.execute(search_plan_context)
+
+            # 存储搜索计划到任务记忆
+            task_memory[task_id]["search_plans"].append(search_plan)
 
             # 获取搜索查询
             queries = search_plan.get("queries", [])
@@ -130,6 +160,9 @@ def main_workflow(query: str, max_iterations: int = 3) -> Dict[str, Any]:
 
             merged_results["result_count"] = len(merged_results["results"])
 
+            # 存储搜索结果到任务记忆
+            task_memory[task_id]["search_results"].append(merged_results)
+
             # 2.3 生成子答案
             sub_answer_context = {
                 "task": task,
@@ -137,9 +170,14 @@ def main_workflow(query: str, max_iterations: int = 3) -> Dict[str, Any]:
             }
 
             sub_answer = sub_answer_agent.execute(sub_answer_context)
+            answer_text = sub_answer.get("answer", "")
 
             # 保存子答案
-            iteration_sub_answers[task_id] = sub_answer.get("answer", "")
+            iteration_sub_answers[task_id] = answer_text
+
+            # 更新任务记忆
+            task_memory[task_id]["sub_answers"].append(answer_text)
+            task_memory[task_id]["iterations"] += 1
 
             # 延迟一小段时间，避免API调用过快
             time.sleep(1)
@@ -149,12 +187,9 @@ def main_workflow(query: str, max_iterations: int = 3) -> Dict[str, Any]:
 
         logging.info(f"迭代 {iteration + 1} 完成，累计子答案: {len(all_sub_answers)}/{len(sub_tasks)}")
 
-        # # 3. 如果已完成所有子任务，退出循环
-        # if len(all_sub_answers) == len(sub_tasks):
-        #     logging.info("所有子任务已完成，准备生成最终答案")
-        #     break
         if iteration == max_iterations-1:
             break
+
         # 4. 生成洞察
         insight_context = {
             "query": query,
@@ -200,5 +235,9 @@ def main_workflow(query: str, max_iterations: int = 3) -> Dict[str, Any]:
         "completed_tasks": len(all_sub_answers)
     }
 
-result = main_workflow("请研究deep research")
+# 测试代码保持不变
+query = "请研究deep research"
+query = "统计下美国纽约历届市长的大学毕业院校"
+#query = "北京到南京共有几条中图路过济南的高铁线"
+result = main_workflow(query)
 print(result["answer"])

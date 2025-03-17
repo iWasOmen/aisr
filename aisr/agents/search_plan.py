@@ -147,6 +147,7 @@ class SearchPlanAgent(Agent):
 - 适当添加限定词以提高精确度
 - 从一般到具体，确保覆盖不同深度的信息
 - 如果有前序搜索结果，考虑如何改进查询
+- 对于专用名词，使用原语言进行搜索，不进行不必要的翻译，避免信息遗漏
 
 请注意：
 - 生成的查询应该简洁明了，每个查询专注于一个明确的信息需求
@@ -170,8 +171,9 @@ class SearchPlanAgent(Agent):
 
         # 检查是否有历史信息
         has_history = (
-            context.get("previous_search_plans") or
-            context.get("previous_sub_answer")
+                context.get("previous_search_plans") or
+                context.get("previous_sub_answer") or
+                context.get("related_tasks_answers")
         )
 
         if not has_history:
@@ -184,7 +186,7 @@ class SearchPlanAgent(Agent):
         if previous_search_plans:
             history_text += "\n### 前序搜索查询\n"
             for i, plan in enumerate(previous_search_plans):
-                history_text += f"\n尝试 {i+1}:\n"
+                history_text += f"\n尝试 {i + 1}:\n"
 
                 queries = plan.get("queries", [])
                 if queries:
@@ -198,7 +200,17 @@ class SearchPlanAgent(Agent):
             # 直接使用子答案作为文本，不假设特定的结构
             history_text += f"{str(previous_sub_answer)[:300]}...\n"
 
-        history_text += "\n\n请基于上述历史信息和当前任务，设计更有效的搜索查询。如果前序查询存在不足，请加以改进；如果前序结果已经包含一些有用信息，请设计查询以获取更深入或补充的信息。\n"
+        # 添加相关任务的答案
+        related_tasks_answers = context.get("related_tasks_answers", {})
+        if related_tasks_answers:
+            history_text += "\n### 相关任务的答案\n"
+            for task_id, answer in related_tasks_answers.items():
+                history_text += f"\n任务ID: {task_id}\n"
+                # 添加答案的摘要
+                answer_summary = str(answer)[:200] + "..." if len(str(answer)) > 200 else str(answer)
+                history_text += f"答案: {answer_summary}\n"
+
+        history_text += "\n\n请基于上述历史信息和当前任务，设计更有效的搜索查询。如果前序查询存在不足，请加以改进；如果前序结果已经包含一些有用信息，请设计查询以获取更深入或补充的信息。如果相关任务的答案中已包含某些信息，请避免重复搜索相同内容，转而专注于填补信息缺口。\n"
 
         return history_text
 
